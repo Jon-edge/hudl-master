@@ -18,6 +18,7 @@ export interface PlinkoConfig {
   ballRestitution: number
   ballFriction: number
   ballShape: "ball" | "square" | "triangle"
+  destroyBalls: boolean
   dropLocation: "random" | "zigzag" | "center"
   pinRadius: number
   pinRows: number
@@ -25,10 +26,16 @@ export interface PlinkoConfig {
   pinRestitution: number
   pinFriction: number
   pinShape: "ball" | "square" | "triangle"
+  pinAngle: number
+  pinWallGap: number
+  pinBucketGap: number
   wallThickness: number
+  rimHeight: number
+  rimWidth: number
   bucketCount: number
   bucketDistribution: "even" | "middle" | "edge"
-  winCount: number
+  winCondition: "nth" | "most" | "first" | "last-empty"
+  winNth: number
   width: number
   height: number
 }
@@ -44,6 +51,7 @@ const defaultConfig: PlinkoConfig = {
   ballRestitution: 0.9,
   ballFriction: 0.005,
   ballShape: "ball",
+  destroyBalls: true,
   dropLocation: "center",
   pinRadius: 3,
   pinRows: 10,
@@ -51,10 +59,16 @@ const defaultConfig: PlinkoConfig = {
   pinRestitution: 0.5,
   pinFriction: 0.1,
   pinShape: "ball",
+  pinAngle: 0,
+  pinWallGap: 20,
+  pinBucketGap: 60,
   wallThickness: 10,
+  rimHeight: 100,
+  rimWidth: 10,
   bucketCount: 6,
   bucketDistribution: "even",
-  winCount: 3,
+  winCondition: "nth",
+  winNth: 3,
   width: 600,
   height: 500
 }
@@ -130,25 +144,37 @@ export function Plinko({ initialConfig }: PlinkoProps) {
 
     const walls = [
       Bodies.rectangle(width / 2, -25, width, 50, { isStatic: true }),
-      Bodies.rectangle(width / 2, height + 25, width, 50, { isStatic: true }),
+      Bodies.rectangle(
+        width / 2,
+        height + config.rimWidth / 2,
+        width,
+        config.rimWidth,
+        { isStatic: true }
+      ),
       Bodies.rectangle(-25, height / 2, 50, height, { isStatic: true }),
       Bodies.rectangle(width + 25, height / 2, 50, height, { isStatic: true })
     ]
 
     Composite.add(engine.world, walls)
 
-    const xSpacing = width / config.pinColumns
-    const ySpacing = (height - 100) / config.pinRows
+    const xSpacing =
+      (width - config.pinWallGap * 2) / config.pinColumns
+    const ySpacing = (height - config.pinBucketGap) / config.pinRows
     const pins: Matter.Body[] = []
     for (let row = 0; row < config.pinRows; row++) {
       for (let col = 0; col < config.pinColumns; col++) {
-        const x = xSpacing / 2 + col * xSpacing + (row % 2 === 0 ? xSpacing / 2 : 0)
+        const x =
+          config.pinWallGap +
+          xSpacing / 2 +
+          col * xSpacing +
+          (row % 2 === 0 ? xSpacing / 2 : 0)
         const y = 50 + row * ySpacing
         pins.push(
           makeShape(config.pinShape, x, y, config.pinRadius, {
             isStatic: true,
             restitution: config.pinRestitution,
-            friction: config.pinFriction
+            friction: config.pinFriction,
+            angle: config.pinShape === "ball" ? 0 : config.pinAngle
           })
         )
       }
@@ -159,7 +185,13 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     bucketBoundsRef.current = bounds
     for (const x of bounds) {
       Composite.add(engine.world, [
-        Bodies.rectangle(x, height - 50, config.wallThickness, 100, { isStatic: true })
+        Bodies.rectangle(
+          x,
+          height - config.rimHeight / 2,
+          config.wallThickness,
+          config.rimHeight,
+          { isStatic: true }
+        )
       ])
     }
 
@@ -189,7 +221,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     const zig = { x: Math.random() * width, dir: 1 }
 
     const dropInterval = setInterval(() => {
-      if (dropped >= config.ballCount) {
+      if (config.ballCount > 0 && dropped >= config.ballCount) {
         clearInterval(dropInterval)
         return
       }
@@ -206,13 +238,15 @@ export function Plinko({ initialConfig }: PlinkoProps) {
       }
       const ball = makeShape(config.ballShape, x, 0, config.ballRadius, {
         restitution: config.ballRestitution,
-        friction: config.ballFriction
+        friction: config.ballFriction,
+        angle: config.ballShape === "ball" ? 0 : Math.random() * Math.PI * 2
       })
       balls.push(ball)
       Composite.add(engine.world, ball)
       dropped += 1
     }, 500)
 
+    let finished = 0
     const afterUpdate = () => {
       balls.forEach((ball, index) => {
         if (ball.position.y > height - 60 && Math.abs(ball.velocity.y) < 1) {
@@ -225,11 +259,38 @@ export function Plinko({ initialConfig }: PlinkoProps) {
           }
           if (bucket >= 0 && bucket < bucketCounts.length) {
             bucketCounts[bucket] += 1
-            Composite.remove(engine.world, ball)
-            balls.splice(index, 1)
-            if (bucketCounts[bucket] >= config.winCount) {
-              setStarted(false)
-              clearInterval(dropInterval)
+            finished += 1
+            if (config.destroyBalls) {
+              Composite.remove(engine.world, ball)
+              balls.splice(index, 1)
+            }
+
+            switch (config.winCondition) {
+              case "nth":
+                if (finished >= config.winNth) {
+                  setStarted(false)
+                  clearInterval(dropInterval)
+                }
+                break
+              case "first":
+                if (finished >= 1) {
+                  setStarted(false)
+                  clearInterval(dropInterval)
+                }
+                break
+              case "last-empty":
+                if (bucketCounts.filter(c => c === 0).length <= 1) {
+                  setStarted(false)
+                  clearInterval(dropInterval)
+                }
+                break
+              case "most":
+              default:
+                if (finished >= config.ballCount && config.ballCount > 0) {
+                  setStarted(false)
+                  clearInterval(dropInterval)
+                }
+                break
             }
           }
         }
@@ -268,17 +329,23 @@ export function Plinko({ initialConfig }: PlinkoProps) {
                 className="flex-1"
                 value={config.ballCount}
                 onValueChange={v => updateConfig('ballCount', v)}
-                min={1}
+                min={0}
                 max={50}
               />
-              <Input
-                className="w-20"
-                type="number"
-                value={config.ballCount}
-                onChange={e => updateConfig('ballCount', Number(e.target.value))}
-                min={1}
-                max={50}
-              />
+              {config.ballCount === 0 ? (
+                <span className="w-20">Unlimited</span>
+              ) : (
+                <Input
+                  className="w-20"
+                  type="number"
+                  value={config.ballCount}
+                  onChange={e =>
+                    updateConfig('ballCount', Number(e.target.value))
+                  }
+                  min={0}
+                  max={50}
+                />
+              )}
             </div>
             <div className="flex items-center gap-2">
               <label className="w-32">Restitution</label>
@@ -323,7 +390,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
             <div className="flex items-center gap-2">
               <label className="w-32">Shape</label>
               <Select
-                className="w-20"
+                className="w-auto"
                 value={config.ballShape}
                 onChange={e => updateConfig('ballShape', e.target.value as PlinkoConfig['ballShape'])}
               >
@@ -335,7 +402,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
             <div className="flex items-center gap-2">
               <label className="w-32">Drop Location</label>
               <Select
-                className="w-20"
+                className="w-auto"
                 value={config.dropLocation}
                 onChange={e => updateConfig('dropLocation', e.target.value as PlinkoConfig['dropLocation'])}
               >
@@ -367,6 +434,65 @@ export function Plinko({ initialConfig }: PlinkoProps) {
                 onChange={e => updateConfig('pinColumns', Number(e.target.value))}
                 min={1}
                 max={20}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="w-32">Size</label>
+              <RangeSlider
+                className="flex-1"
+                value={config.pinRadius}
+                onValueChange={v => updateConfig('pinRadius', v)}
+                min={2}
+                max={20}
+              />
+              <Input
+                className="w-20"
+                type="number"
+                value={config.pinRadius}
+                onChange={e => updateConfig('pinRadius', Number(e.target.value))}
+                min={2}
+                max={20}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="w-32">Angle</label>
+              <RangeSlider
+                className="flex-1"
+                value={config.pinAngle}
+                onValueChange={v => updateConfig('pinAngle', v)}
+                min={0}
+                max={360}
+              />
+              <Input
+                className="w-20"
+                type="number"
+                value={config.pinAngle}
+                onChange={e => updateConfig('pinAngle', Number(e.target.value))}
+                min={0}
+                max={360}
+                disabled={config.pinShape === 'ball'}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="w-32">Wall Gap</label>
+              <Input
+                className="w-20"
+                type="number"
+                value={config.pinWallGap}
+                onChange={e => updateConfig('pinWallGap', Number(e.target.value))}
+                min={0}
+                max={100}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="w-32">Bucket Gap</label>
+              <Input
+                className="w-20"
+                type="number"
+                value={config.pinBucketGap}
+                onChange={e => updateConfig('pinBucketGap', Number(e.target.value))}
+                min={0}
+                max={200}
               />
             </div>
             <div className="flex items-center gap-2">
@@ -412,7 +538,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
             <div className="flex items-center gap-2">
               <label className="w-32">Shape</label>
               <Select
-                className="w-20"
+                className="w-auto"
                 value={config.pinShape}
                 onChange={e => updateConfig('pinShape', e.target.value as PlinkoConfig['pinShape'])}
               >
@@ -484,35 +610,79 @@ export function Plinko({ initialConfig }: PlinkoProps) {
             <div className="flex items-center gap-2">
               <label className="w-32">Distribution</label>
               <Select
-                className="w-20"
+                className="w-auto"
                 value={config.bucketDistribution}
-                onChange={e => updateConfig('bucketDistribution', e.target.value as PlinkoConfig['bucketDistribution'])}
+                onChange={e =>
+                  updateConfig(
+                    'bucketDistribution',
+                    e.target.value as PlinkoConfig['bucketDistribution']
+                  )
+                }
               >
                 <option value="even">Even</option>
                 <option value="middle">Middle-Weighted</option>
                 <option value="edge">Edge-Weighted</option>
               </Select>
             </div>
+            <div className="flex items-center gap-2">
+              <label className="w-32">Destroy Balls</label>
+              <input
+                type="checkbox"
+                checked={config.destroyBalls}
+                onChange={e => updateConfig('destroyBalls', e.target.checked)}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="w-32">Rim Height</label>
+              <Input
+                className="w-20"
+                type="number"
+                value={config.rimHeight}
+                onChange={e => updateConfig('rimHeight', Number(e.target.value))}
+                min={10}
+                max={200}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="w-32">Rim Width</label>
+              <Input
+                className="w-20"
+                type="number"
+                value={config.rimWidth}
+                onChange={e => updateConfig('rimWidth', Number(e.target.value))}
+                min={5}
+                max={50}
+              />
+            </div>
           </fieldset>
           <fieldset className="space-y-2">
             <legend className="font-semibold">Win</legend>
             <div className="flex items-center gap-2">
-              <label className="w-32">Per Bucket</label>
-              <RangeSlider
-                className="flex-1"
-                value={config.winCount}
-                onValueChange={v => updateConfig('winCount', v)}
-                min={1}
-                max={config.ballCount}
-              />
-              <Input
-                className="w-20"
-                type="number"
-                value={config.winCount}
-                onChange={e => updateConfig('winCount', Number(e.target.value))}
-                min={1}
-                max={config.ballCount}
-              />
+              <label className="w-32">Condition</label>
+              <Select
+                value={config.winCondition}
+                onChange={e =>
+                  updateConfig(
+                    'winCondition',
+                    e.target.value as PlinkoConfig['winCondition']
+                  )
+                }
+                className="w-auto"
+              >
+                <option value="nth">Nth ball</option>
+                <option value="most">Most balls</option>
+                <option value="first">First ball</option>
+                <option value="last-empty">Last empty</option>
+              </Select>
+              {config.winCondition === 'nth' && (
+                <Input
+                  className="w-20"
+                  type="number"
+                  value={config.winNth}
+                  onChange={e => updateConfig('winNth', Number(e.target.value))}
+                  min={1}
+                />
+              )}
             </div>
           </fieldset>
         </div>
