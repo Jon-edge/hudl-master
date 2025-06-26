@@ -28,7 +28,8 @@ export interface PlinkoConfig {
   pinShape: "ball" | "square" | "triangle"
   pinAngle: number
   pinWallGap: number
-  pinBucketGap: number
+  pinRimGap: number
+  ceilingGap: number
   wallThickness: number
   rimHeight: number
   rimWidth: number
@@ -61,7 +62,8 @@ const defaultConfig: PlinkoConfig = {
   pinShape: "ball",
   pinAngle: 0,
   pinWallGap: 20,
-  pinBucketGap: 60,
+  pinRimGap: 60,
+  ceilingGap: 50,
   wallThickness: 10,
   rimHeight: 100,
   rimWidth: 10,
@@ -81,13 +83,39 @@ export function Plinko({ initialConfig }: PlinkoProps) {
   const [config, setConfig] = useState<PlinkoConfig>(initialConfig ?? defaultConfig)
   const [showConfig, setShowConfig] = useState(false)
   const bucketBoundsRef = useRef<number[]>([])
-  
+  const preserveBallsRef = useRef(false)
+  const restartRef = useRef(false)
+
+  const stopGame = (preserve: boolean) => {
+    preserveBallsRef.current = preserve
+    setStarted(false)
+  }
+
+  const startGame = (resetBoard: boolean = true) => {
+    preserveBallsRef.current = false
+    if (resetBoard) {
+      setConfig(prev => ({ ...prev }))
+    }
+    setStarted(true)
+  }
+
   const updateConfig = <K extends keyof PlinkoConfig>(
     key: K,
     value: PlinkoConfig[K]
   ) => {
     setConfig(prev => ({ ...prev, [key]: value }))
+    if (started) {
+      restartRef.current = true
+      stopGame(false)
+    }
   }
+
+  useEffect(() => {
+    if (restartRef.current && !started) {
+      restartRef.current = false
+      startGame(false)
+    }
+  }, [config, started])
 
   const makeShape = (
     type: "ball" | "square" | "triangle",
@@ -157,18 +185,17 @@ export function Plinko({ initialConfig }: PlinkoProps) {
 
     Composite.add(engine.world, walls)
 
-    const xSpacing =
-      (width - config.pinWallGap * 2) / config.pinColumns
-    const ySpacing = (height - config.pinBucketGap) / config.pinRows
+    const xSpacing = (width - config.pinWallGap * 2) / (config.pinColumns - 1)
+    const yStart = config.ceilingGap
+    const yEnd = height - config.rimHeight - config.pinRimGap
+    const ySpacing =
+      config.pinRows > 1 ? (yEnd - yStart) / (config.pinRows - 1) : 0
     const pins: Matter.Body[] = []
     for (let row = 0; row < config.pinRows; row++) {
       for (let col = 0; col < config.pinColumns; col++) {
         const x =
-          config.pinWallGap +
-          xSpacing / 2 +
-          col * xSpacing +
-          (row % 2 === 0 ? xSpacing / 2 : 0)
-        const y = 50 + row * ySpacing
+          config.pinWallGap + col * xSpacing + (row % 2 === 0 ? 0 : xSpacing / 2)
+        const y = yStart + row * ySpacing
         pins.push(
           makeShape(config.pinShape, x, y, config.pinRadius, {
             isStatic: true,
@@ -268,26 +295,26 @@ export function Plinko({ initialConfig }: PlinkoProps) {
             switch (config.winCondition) {
               case "nth":
                 if (finished >= config.winNth) {
-                  setStarted(false)
+                  stopGame(true)
                   clearInterval(dropInterval)
                 }
                 break
               case "first":
                 if (finished >= 1) {
-                  setStarted(false)
+                  stopGame(true)
                   clearInterval(dropInterval)
                 }
                 break
               case "last-empty":
                 if (bucketCounts.filter(c => c === 0).length <= 1) {
-                  setStarted(false)
+                  stopGame(true)
                   clearInterval(dropInterval)
                 }
                 break
               case "most":
               default:
                 if (finished >= config.ballCount && config.ballCount > 0) {
-                  setStarted(false)
+                  stopGame(true)
                   clearInterval(dropInterval)
                 }
                 break
@@ -302,7 +329,9 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     return () => {
       clearInterval(dropInterval)
       Events.off(engine, "afterUpdate", afterUpdate)
-      balls.forEach(ball => Composite.remove(engine.world, ball))
+      if (!preserveBallsRef.current) {
+        balls.forEach(ball => Composite.remove(engine.world, ball))
+      }
     }
   }, [started, config, engine])
 
@@ -314,7 +343,9 @@ export function Plinko({ initialConfig }: PlinkoProps) {
         style={{ width: config.width, height: config.height }}
       />
       <div className="flex gap-2">
-        <Button onClick={() => setStarted(true)}>Start</Button>
+        <Button onClick={() => (started ? stopGame(false) : startGame())}>
+          {started ? 'Stop' : 'Start'}
+        </Button>
         <Button variant="outline" onClick={() => setShowConfig(v => !v)}>
           Config
         </Button>
@@ -485,12 +516,12 @@ export function Plinko({ initialConfig }: PlinkoProps) {
               />
             </div>
             <div className="flex items-center gap-2">
-              <label className="w-32">Bucket Gap</label>
+              <label className="w-32">Pin-Rim Gap</label>
               <Input
                 className="w-20"
                 type="number"
-                value={config.pinBucketGap}
-                onChange={e => updateConfig('pinBucketGap', Number(e.target.value))}
+                value={config.pinRimGap}
+                onChange={e => updateConfig('pinRimGap', Number(e.target.value))}
                 min={0}
                 max={200}
               />
@@ -549,8 +580,19 @@ export function Plinko({ initialConfig }: PlinkoProps) {
             </div>
           </fieldset>
           <fieldset className="space-y-2">
-            <legend className="font-semibold">Board</legend>
-            <div className="flex items-center gap-2">
+          <legend className="font-semibold">Board</legend>
+          <div className="flex items-center gap-2">
+            <label className="w-32">Ceiling Gap</label>
+            <Input
+              className="w-20"
+              type="number"
+              value={config.ceilingGap}
+              onChange={e => updateConfig('ceilingGap', Number(e.target.value))}
+              min={0}
+              max={200}
+            />
+          </div>
+          <div className="flex items-center gap-2">
               <label className="w-32">Width</label>
               <RangeSlider
                 className="flex-1"
