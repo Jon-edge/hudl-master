@@ -89,6 +89,8 @@ export function Plinko({ initialConfig }: PlinkoProps) {
 
   const stopGame = (preserve: boolean): void => {
     preserveBallsRef.current = preserve
+    // Clear restart flag when stopping to prevent unwanted restarts
+    restartRef.current = false
     setStarted(false)
   }
 
@@ -104,16 +106,24 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     key: K,
     value: PlinkoConfig[K]
   ): void => {
-    if (started || preserveBallsRef.current) {
-      if (started) restartRef.current = true
+    // Only trigger restart logic if game is currently running
+    // If game completed (preserve=true), just reset state cleanly
+    if (started) {
+      restartRef.current = true
       stopGame(false)
+    } else if (preserveBallsRef.current) {
+      // Game completed, reset preserve flag without triggering restart
+      preserveBallsRef.current = false
+      setBoardKey(k => k + 1)
     }
     setConfig(prev => ({ ...prev, [key]: value }))
-    setBoardKey(k => k + 1)
+    if (!started && !preserveBallsRef.current) {
+      setBoardKey(k => k + 1)
+    }
   }
 
   useEffect(() => {
-    if (restartRef.current && !started) {
+    if (restartRef.current && !started && !preserveBallsRef.current) {
       restartRef.current = false
       startGame(false)
     }
@@ -346,7 +356,15 @@ export function Plinko({ initialConfig }: PlinkoProps) {
         style={{ width: config.width, height: config.height }}
       />
       <div className="flex gap-2">
-        <Button onClick={() => (started ? stopGame(false) : startGame())}>
+        <Button onClick={() => {
+          if (started) {
+            stopGame(false)
+          } else {
+            // Clear preserve flag when starting a new game
+            preserveBallsRef.current = false
+            startGame()
+          }
+        }}>
           {started ? 'Stop' : 'Start'}
         </Button>
         <Button variant="outline" onClick={() => setShowConfig(v => !v)}>
