@@ -107,6 +107,8 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     if (started) {
       restartRef.current = true
       stopGame(false)
+    } else if (preserveBallsRef.current) {
+      stopGame(false)
     }
   }
 
