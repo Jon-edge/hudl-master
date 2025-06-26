@@ -87,15 +87,14 @@ export function Plinko({ initialConfig }: PlinkoProps) {
   const preserveBallsRef = useRef(false)
   const restartRef = useRef(false)
 
-  const stopGame = (preserve: boolean) => {
+  const stopGame = (preserve: boolean): void => {
     preserveBallsRef.current = preserve
     setStarted(false)
   }
 
-  const startGame = (resetBoard: boolean = true) => {
+  const startGame = (resetBoard: boolean = true): void => {
     preserveBallsRef.current = false
     if (resetBoard) {
-      setConfig(prev => ({ ...prev }))
       setBoardKey(k => k + 1)
     }
     setStarted(true)
@@ -104,7 +103,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
   const updateConfig = <K extends keyof PlinkoConfig>(
     key: K,
     value: PlinkoConfig[K]
-  ) => {
+  ): void => {
     setConfig(prev => ({ ...prev, [key]: value }))
     setBoardKey(k => k + 1)
     if (started) {
@@ -238,7 +237,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
         render.canvas.parentNode.removeChild(render.canvas)
       }
     }
-  }, [config, engine, runner])
+  }, [config, boardKey, engine, runner])
 
   useEffect(() => {
     if (!started) {
