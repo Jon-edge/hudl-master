@@ -104,14 +104,12 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     key: K,
     value: PlinkoConfig[K]
   ): void => {
-    setConfig(prev => ({ ...prev, [key]: value }))
-    setBoardKey(k => k + 1)
-    if (started) {
-      restartRef.current = true
-      stopGame(false)
-    } else if (preserveBallsRef.current) {
+    if (started || preserveBallsRef.current) {
+      if (started) restartRef.current = true
       stopGame(false)
     }
+    setConfig(prev => ({ ...prev, [key]: value }))
+    setBoardKey(k => k + 1)
   }
 
   useEffect(() => {
