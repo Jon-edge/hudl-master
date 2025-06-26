@@ -82,6 +82,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
   const [started, setStarted] = useState(false)
   const [config, setConfig] = useState<PlinkoConfig>(initialConfig ?? defaultConfig)
   const [showConfig, setShowConfig] = useState(false)
+  const [boardKey, setBoardKey] = useState(0)
   const bucketBoundsRef = useRef<number[]>([])
   const preserveBallsRef = useRef(false)
   const restartRef = useRef(false)
@@ -95,6 +96,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     preserveBallsRef.current = false
     if (resetBoard) {
       setConfig(prev => ({ ...prev }))
+      setBoardKey(k => k + 1)
     }
     setStarted(true)
   }
@@ -104,6 +106,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     value: PlinkoConfig[K]
   ) => {
     setConfig(prev => ({ ...prev, [key]: value }))
+    setBoardKey(k => k + 1)
     if (started) {
       restartRef.current = true
       stopGame(false)
@@ -340,6 +343,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
   return (
     <div className="space-y-2">
       <div
+        key={boardKey}
         className="border"
         ref={canvasRef}
         style={{ width: config.width, height: config.height }}
