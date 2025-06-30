@@ -1,22 +1,44 @@
 "use client"
 
-import React, { useRef, useState, useEffect } from "react"
-import Matter, { Engine, Render, Runner, Bodies, Composite, Events } from "matter-js"
+import { useRef, useState, useEffect } from "react"
+import Matter, {
+  Engine,
+  Render,
+  Runner,
+  Bodies,
+  Composite,
+  Events
+} from "matter-js"
 import { Button } from "@/components/ui/button"
-import { Input, RangeSlider } from "@/components/ui"
+import { Input, RangeSlider, Select } from "@/components/ui"
 
 export interface PlinkoConfig {
   ballCount: number
   ballRadius: number
   ballRestitution: number
   ballFriction: number
+  ballShape: "ball" | "square" | "triangle"
+  destroyBalls: boolean
+  dropLocation: "random" | "zigzag" | "center"
   pinRadius: number
   pinRows: number
   pinColumns: number
+  pinRestitution: number
+  pinFriction: number
+  pinShape: "ball" | "square" | "triangle"
+  pinAngle: number
+  pinWallGap: number
+  pinRimGap: number
+  ceilingGap: number
   wallThickness: number
+  rimHeight: number
+  rimWidth: number
   bucketCount: number
-  winCount: number
-  autoStart: boolean
+  bucketDistribution: "even" | "middle" | "edge"
+  winCondition: "nth" | "most" | "first" | "last-empty"
+  winNth: number
+  width: number
+  height: number
 }
 
 export interface PlinkoProps {
@@ -29,13 +51,28 @@ const defaultConfig: PlinkoConfig = {
   ballRadius: 8,
   ballRestitution: 0.9,
   ballFriction: 0.005,
+  ballShape: "ball",
+  destroyBalls: true,
+  dropLocation: "center",
   pinRadius: 3,
   pinRows: 10,
   pinColumns: 8,
+  pinRestitution: 0.5,
+  pinFriction: 0.1,
+  pinShape: "ball",
+  pinAngle: 0,
+  pinWallGap: 20,
+  pinRimGap: 60,
+  ceilingGap: 50,
   wallThickness: 10,
+  rimHeight: 100,
+  rimWidth: 10,
   bucketCount: 6,
-  winCount: 3,
-  autoStart: false
+  bucketDistribution: "even",
+  winCondition: "nth",
+  winNth: 3,
+  width: 600,
+  height: 500
 }
 
 export function Plinko({ initialConfig }: PlinkoProps) {
@@ -45,114 +82,303 @@ export function Plinko({ initialConfig }: PlinkoProps) {
   const [started, setStarted] = useState(false)
   const [config, setConfig] = useState<PlinkoConfig>(initialConfig ?? defaultConfig)
   const [showConfig, setShowConfig] = useState(false)
-  
-  const updateConfig = (key: keyof PlinkoConfig, value: number | boolean) => {
+  const [boardKey, setBoardKey] = useState(0)
+  const bucketBoundsRef = useRef<number[]>([])
+  const preserveBallsRef = useRef(false)
+  const restartRef = useRef(false)
+
+  const stopGame = (preserve: boolean): void => {
+    // Even if we want to preserve balls visually, we need to track this separately
+    // from the cleanup mechanism to avoid physics engine issues
+    preserveBallsRef.current = preserve
+    // Clear restart flag when stopping to prevent unwanted restarts
+    restartRef.current = false
+    setStarted(false)
+  }
+
+  const startGame = (resetBoard: boolean = true): void => {
+    // Always ensure preserve flag is cleared when starting a new game
+    preserveBallsRef.current = false
+    
+    // Always reset the board when starting a new game to ensure clean state
+    if (resetBoard) {
+      // Force a full recreation of the physics world
+      Composite.clear(engine.world, false)
+      setBoardKey(k => k + 1)
+    }
+    
+    setStarted(true)
+  }
+
+  const updateConfig = <K extends keyof PlinkoConfig>(
+    key: K,
+    value: PlinkoConfig[K]
+  ): void => {
+    // Consistent reset logic regardless of game state
+    if (started) {
+      // If game is running, set restart flag and stop
+      restartRef.current = true
+      stopGame(false)
+    } else {
+      // Whether game completed (preserve=true) or not, always reset cleanly
+      preserveBallsRef.current = false
+      setBoardKey(k => k + 1)
+    }
+    
+    // Update the config value
     setConfig(prev => ({ ...prev, [key]: value }))
   }
 
   useEffect(() => {
-    if (config.autoStart && !started) {
-      setStarted(true)
+    if (restartRef.current && !started && !preserveBallsRef.current) {
+      restartRef.current = false
+      startGame(false)
     }
-  }, [config.autoStart, started])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config, started])
+
+  const makeShape = (
+    type: "ball" | "square" | "triangle",
+    x: number,
+    y: number,
+    radius: number,
+    options: Matter.IBodyDefinition
+  ): Matter.Body => {
+    switch (type) {
+      case "square":
+        return Bodies.rectangle(x, y, radius * 2, radius * 2, options)
+      case "triangle":
+        return Bodies.polygon(x, y, 3, radius, options)
+      case "ball":
+      default:
+        return Bodies.circle(x, y, radius, options)
+    }
+  }
+
+  const bucketBounds = (
+    count: number,
+    totalWidth: number,
+    distribution: "even" | "middle" | "edge"
+  ): number[] => {
+    if (distribution === "even") {
+      return Array.from({ length: count + 1 }, (_, i) => (i * totalWidth) / count)
+    }
+    const weights: number[] = []
+    for (let i = 0; i < count; i++) {
+      const t = i / (count - 1)
+      const base = 1 + Math.cos((t - 0.5) * Math.PI)
+      weights.push(distribution === "middle" ? base : 2 - base)
+    }
+    const sum = weights.reduce((a, b) => a + b, 0)
+    const bounds: number[] = [0]
+    let pos = 0
+    for (let i = 0; i < count; i++) {
+      pos += (totalWidth * weights[i]) / sum
+      bounds.push(pos)
+    }
+    return bounds
+  }
+
 
   useEffect(() => {
-    if (started && canvasRef.current != null) {
-      const width = canvasRef.current.clientWidth
-      const height = 500
-      const render = Render.create({
-        element: canvasRef.current,
-        engine,
-        options: { width, height, wireframes: false, background: "#f8fafc" }
-      })
+    if (canvasRef.current == null) return
 
-      const walls = [
-        Bodies.rectangle(width / 2, -25, width, 50, { isStatic: true }),
-        Bodies.rectangle(width / 2, height + 25, width, 50, { isStatic: true }),
-        Bodies.rectangle(-25, height / 2, 50, height, { isStatic: true }),
-        Bodies.rectangle(width + 25, height / 2, 50, height, { isStatic: true })
-      ]
+    const { width, height } = config
+    const render = Render.create({
+      element: canvasRef.current,
+      engine,
+      options: { width, height, wireframes: false, background: "#f8fafc" }
+    })
 
-      Composite.add(engine.world, walls)
+    const walls = [
+      Bodies.rectangle(width / 2, -25, width, 50, { isStatic: true }),
+      Bodies.rectangle(
+        width / 2,
+        height + config.rimWidth / 2,
+        width,
+        config.rimWidth,
+        { isStatic: true }
+      ),
+      Bodies.rectangle(-25, height / 2, 50, height, { isStatic: true }),
+      Bodies.rectangle(width + 25, height / 2, 50, height, { isStatic: true })
+    ]
 
-      // pins
-      const xSpacing = width / config.pinColumns
-      const ySpacing = (height - 100) / config.pinRows
-      const pins: Matter.Body[] = []
-      for (let row = 0; row < config.pinRows; row++) {
-        for (let col = 0; col < config.pinColumns; col++) {
-          const x = xSpacing / 2 + col * xSpacing + (row % 2 === 0 ? xSpacing / 2 : 0)
-          const y = 50 + row * ySpacing
-          pins.push(Bodies.circle(x, y, config.pinRadius, { isStatic: true }))
-        }
-      }
-      Composite.add(engine.world, pins)
+    Composite.add(engine.world, walls)
 
-      // buckets
-      const bucketWidth = width / config.bucketCount
-      for (let i = 0; i <= config.bucketCount; i++) {
-        const x = i * bucketWidth
-        Composite.add(engine.world, [
-          Bodies.rectangle(x, height - 50, config.wallThickness, 100, { isStatic: true })
-        ])
-      }
-
-      Render.run(render)
-      Runner.run(runner, engine)
-
-      let dropped = 0
-      const balls: Matter.Body[] = []
-      const bucketCounts = new Array(config.bucketCount).fill(0)
-      const dropInterval = setInterval(() => {
-        if (dropped >= config.ballCount) {
-          clearInterval(dropInterval)
-          return
-        }
-        const ball = Bodies.circle(width / 2, 0, config.ballRadius, {
-          restitution: config.ballRestitution,
-          friction: config.ballFriction
-        })
-        balls.push(ball)
-        Composite.add(engine.world, ball)
-        dropped += 1
-      }, 500)
-
-      const afterUpdate = () => {
-        balls.forEach((ball, index) => {
-          if (ball.position.y > height - 60 && Math.abs(ball.velocity.y) < 1) {
-            const bucket = Math.floor(ball.position.x / bucketWidth)
-            if (bucket >= 0 && bucket < bucketCounts.length) {
-              bucketCounts[bucket] += 1
-              Composite.remove(engine.world, ball)
-              balls.splice(index, 1)
-              if (bucketCounts[bucket] >= config.winCount) {
-                setStarted(false)
-                clearInterval(dropInterval)
-              }
-            }
-          }
-        })
-      }
-      Events.on(engine, "afterUpdate", afterUpdate)
-
-      return () => {
-        clearInterval(dropInterval)
-        Events.off(engine, "afterUpdate", afterUpdate)
-        Render.stop(render)
-        Runner.stop(runner)
-        Composite.clear(engine.world, false)
-        if (render.canvas.parentNode != null) {
-          render.canvas.parentNode.removeChild(render.canvas)
-        }
+    const xSpacing = (width - config.pinWallGap * 2) / (config.pinColumns - 1)
+    const yStart = config.ceilingGap
+    const yEnd = height - config.rimHeight - config.pinRimGap
+    const ySpacing =
+      config.pinRows > 1 ? (yEnd - yStart) / (config.pinRows - 1) : 0
+    const pins: Matter.Body[] = []
+    for (let row = 0; row < config.pinRows; row++) {
+      for (let col = 0; col < config.pinColumns; col++) {
+        const x =
+          config.pinWallGap + col * xSpacing + (row % 2 === 0 ? 0 : xSpacing / 2)
+        const y = yStart + row * ySpacing
+        pins.push(
+          makeShape(config.pinShape, x, y, config.pinRadius, {
+            isStatic: true,
+            restitution: config.pinRestitution,
+            friction: config.pinFriction,
+            angle: config.pinShape === "ball" ? 0 : config.pinAngle
+          })
+        )
       }
     }
-  }, [started, config, engine, runner])
+    Composite.add(engine.world, pins)
+
+    const bounds = bucketBounds(config.bucketCount, width, config.bucketDistribution)
+    bucketBoundsRef.current = bounds
+    for (const x of bounds) {
+      Composite.add(engine.world, [
+        Bodies.rectangle(
+          x,
+          height - config.rimHeight / 2,
+          config.wallThickness,
+          config.rimHeight,
+          { isStatic: true }
+        )
+      ])
+    }
+
+    Render.run(render)
+    Runner.run(runner, engine)
+
+    return () => {
+      Render.stop(render)
+      Runner.stop(runner)
+      Composite.clear(engine.world, false)
+      if (render.canvas.parentNode != null) {
+        render.canvas.parentNode.removeChild(render.canvas)
+      }
+    }
+  }, [config, boardKey, engine, runner])
+
+  useEffect(() => {
+    if (!started) {
+      return
+    }
+
+    const { width, height } = config
+    const bounds = bucketBoundsRef.current
+    const balls: Matter.Body[] = []
+    const bucketCounts = new Array(config.bucketCount).fill(0)
+    let dropped = 0
+    const zig = { x: Math.random() * width, dir: 1 }
+
+    const dropInterval = setInterval(() => {
+      if (config.ballCount > 0 && dropped >= config.ballCount) {
+        clearInterval(dropInterval)
+        return
+      }
+      let x = width / 2
+      if (config.dropLocation === "random") {
+        x = Math.random() * width
+      } else if (config.dropLocation === "zigzag") {
+        x = zig.x
+        zig.x += (width / config.pinColumns) * zig.dir
+        if (zig.x < config.ballRadius || zig.x > width - config.ballRadius) {
+          zig.dir *= -1
+          zig.x = Math.max(config.ballRadius, Math.min(width - config.ballRadius, zig.x))
+        }
+      }
+      const ball = makeShape(config.ballShape, x, 0, config.ballRadius, {
+        restitution: config.ballRestitution,
+        friction: config.ballFriction,
+        angle: config.ballShape === "ball" ? 0 : Math.random() * Math.PI * 2
+      })
+      balls.push(ball)
+      Composite.add(engine.world, ball)
+      dropped += 1
+    }, 500)
+
+    let finished = 0
+    const afterUpdate = () => {
+      balls.forEach((ball, index) => {
+        if (ball.position.y > height - 60 && Math.abs(ball.velocity.y) < 1) {
+          let bucket = -1
+          for (let i = 0; i < bounds.length - 1; i++) {
+            if (ball.position.x >= bounds[i] && ball.position.x < bounds[i + 1]) {
+              bucket = i
+              break
+            }
+          }
+          if (bucket >= 0 && bucket < bucketCounts.length) {
+            bucketCounts[bucket] += 1
+            finished += 1
+            if (config.destroyBalls) {
+              Composite.remove(engine.world, ball)
+              balls.splice(index, 1)
+            }
+
+            switch (config.winCondition) {
+              case "nth":
+                if (finished >= config.winNth) {
+                  stopGame(true)
+                  clearInterval(dropInterval)
+                }
+                break
+              case "first":
+                if (finished >= 1) {
+                  stopGame(true)
+                  clearInterval(dropInterval)
+                }
+                break
+              case "last-empty":
+                if (bucketCounts.filter(c => c === 0).length <= 1) {
+                  stopGame(true)
+                  clearInterval(dropInterval)
+                }
+                break
+              case "most":
+              default:
+                if (finished >= config.ballCount && config.ballCount > 0) {
+                  stopGame(true)
+                  clearInterval(dropInterval)
+                }
+                break
+            }
+          }
+        }
+      })
+    }
+
+    Events.on(engine, "afterUpdate", afterUpdate)
+
+    return () => {
+      clearInterval(dropInterval)
+      Events.off(engine, "afterUpdate", afterUpdate)
+      if (!preserveBallsRef.current) {
+        balls.forEach(ball => Composite.remove(engine.world, ball))
+      }
+    }
+  }, [started, config, engine])
 
   return (
     <div className="space-y-2">
-      <div className="w-full border" ref={canvasRef} />
+      <div
+        key={boardKey}
+        className="border"
+        ref={canvasRef}
+        style={{ width: config.width, height: config.height }}
+      />
       <div className="flex gap-2">
-        <Button onClick={() => setStarted(true)}>Start</Button>
+        <Button onClick={() => {
+          if (started) {
+            stopGame(false)
+          } else {
+            // Force cleanup of any preserved objects before starting
+            // This prevents issues after a win condition
+            if (preserveBallsRef.current) {
+              preserveBallsRef.current = false
+              Composite.clear(engine.world, false)
+            }
+            startGame(true)
+          }
+        }}>
+          {started ? 'Stop' : 'Start'}
+        </Button>
         <Button variant="outline" onClick={() => setShowConfig(v => !v)}>
           Config
         </Button>
@@ -161,46 +387,377 @@ export function Plinko({ initialConfig }: PlinkoProps) {
         <div className="space-y-4 p-2 border rounded-md">
           <fieldset className="space-y-2">
             <legend className="font-semibold">Balls</legend>
-            <div className="grid grid-cols-2 gap-2 items-center">
+            <div className="flex items-center gap-2">
+              <label className="w-32">Count</label>
               <RangeSlider
+                className="flex-1"
                 value={config.ballCount}
                 onValueChange={v => updateConfig('ballCount', v)}
-                min={1}
+                min={0}
                 max={50}
               />
+              {config.ballCount === 0 ? (
+                <span className="w-20">Unlimited</span>
+              ) : (
+                <Input
+                  className="w-20"
+                  type="number"
+                  value={config.ballCount}
+                  onChange={e =>
+                    updateConfig('ballCount', Number(e.target.value))
+                  }
+                  min={0}
+                  max={50}
+                />
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="w-32">Restitution</label>
+              <RangeSlider
+                className="flex-1"
+                value={config.ballRestitution}
+                onValueChange={v => updateConfig('ballRestitution', v)}
+                min={0}
+                max={1}
+                step={0.05}
+              />
               <Input
+                className="w-20"
                 type="number"
-                value={config.ballCount}
-                onChange={e => updateConfig('ballCount', Number(e.target.value))}
+                value={config.ballRestitution}
+                onChange={e => updateConfig('ballRestitution', Number(e.target.value))}
+                min={0}
+                max={1}
+                step={0.05}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="w-32">Friction</label>
+              <RangeSlider
+                className="flex-1"
+                value={config.ballFriction}
+                onValueChange={v => updateConfig('ballFriction', v)}
+                min={0}
+                max={1}
+                step={0.01}
+              />
+              <Input
+                className="w-20"
+                type="number"
+                value={config.ballFriction}
+                onChange={e => updateConfig('ballFriction', Number(e.target.value))}
+                min={0}
+                max={1}
+                step={0.01}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="w-32">Shape</label>
+              <Select
+                className="w-auto"
+                value={config.ballShape}
+                onChange={e => updateConfig('ballShape', e.target.value as PlinkoConfig['ballShape'])}
+              >
+                <option value="ball">Ball</option>
+                <option value="square">Square</option>
+                <option value="triangle">Triangle</option>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="w-32">Drop Location</label>
+              <Select
+                className="w-auto"
+                value={config.dropLocation}
+                onChange={e => updateConfig('dropLocation', e.target.value as PlinkoConfig['dropLocation'])}
+              >
+                <option value="random">Random</option>
+                <option value="zigzag">Zig-Zag</option>
+                <option value="center">Center</option>
+              </Select>
+            </div>
+          </fieldset>
+          <fieldset className="space-y-2">
+            <legend className="font-semibold">Pins</legend>
+            <div className="flex items-center gap-2">
+              <label className="w-32">Rows</label>
+              <Input
+                className="w-20"
+                type="number"
+                value={config.pinRows}
+                onChange={e => updateConfig('pinRows', Number(e.target.value))}
                 min={1}
+                max={20}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="w-32">Columns</label>
+              <Input
+                className="w-20"
+                type="number"
+                value={config.pinColumns}
+                onChange={e => updateConfig('pinColumns', Number(e.target.value))}
+                min={1}
+                max={20}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="w-32">Size</label>
+              <RangeSlider
+                className="flex-1"
+                value={config.pinRadius}
+                onValueChange={v => updateConfig('pinRadius', v)}
+                min={2}
+                max={20}
+              />
+              <Input
+                className="w-20"
+                type="number"
+                value={config.pinRadius}
+                onChange={e => updateConfig('pinRadius', Number(e.target.value))}
+                min={2}
+                max={20}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="w-32">Angle</label>
+              <RangeSlider
+                className="flex-1"
+                value={config.pinAngle}
+                onValueChange={v => updateConfig('pinAngle', v)}
+                min={0}
+                max={360}
+              />
+              <Input
+                className="w-20"
+                type="number"
+                value={config.pinAngle}
+                onChange={e => updateConfig('pinAngle', Number(e.target.value))}
+                min={0}
+                max={360}
+                disabled={config.pinShape === 'ball'}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="w-32">Wall Gap</label>
+              <Input
+                className="w-20"
+                type="number"
+                value={config.pinWallGap}
+                onChange={e => updateConfig('pinWallGap', Number(e.target.value))}
+                min={0}
+                max={100}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="w-32">Pin-Rim Gap</label>
+              <Input
+                className="w-20"
+                type="number"
+                value={config.pinRimGap}
+                onChange={e => updateConfig('pinRimGap', Number(e.target.value))}
+                min={0}
+                max={200}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="w-32">Restitution</label>
+              <RangeSlider
+                className="flex-1"
+                value={config.pinRestitution}
+                onValueChange={v => updateConfig('pinRestitution', v)}
+                min={0}
+                max={1}
+                step={0.05}
+              />
+              <Input
+                className="w-20"
+                type="number"
+                value={config.pinRestitution}
+                onChange={e => updateConfig('pinRestitution', Number(e.target.value))}
+                min={0}
+                max={1}
+                step={0.05}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="w-32">Friction</label>
+              <RangeSlider
+                className="flex-1"
+                value={config.pinFriction}
+                onValueChange={v => updateConfig('pinFriction', v)}
+                min={0}
+                max={1}
+                step={0.01}
+              />
+              <Input
+                className="w-20"
+                type="number"
+                value={config.pinFriction}
+                onChange={e => updateConfig('pinFriction', Number(e.target.value))}
+                min={0}
+                max={1}
+                step={0.01}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="w-32">Shape</label>
+              <Select
+                className="w-auto"
+                value={config.pinShape}
+                onChange={e => updateConfig('pinShape', e.target.value as PlinkoConfig['pinShape'])}
+              >
+                <option value="ball">Ball</option>
+                <option value="square">Square</option>
+                <option value="triangle">Triangle</option>
+              </Select>
+            </div>
+          </fieldset>
+          <fieldset className="space-y-2">
+          <legend className="font-semibold">Board</legend>
+          <div className="flex items-center gap-2">
+            <label className="w-32">Ceiling Gap</label>
+            <Input
+              className="w-20"
+              type="number"
+              value={config.ceilingGap}
+              onChange={e => updateConfig('ceilingGap', Number(e.target.value))}
+              min={0}
+              max={200}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+              <label className="w-32">Width</label>
+              <RangeSlider
+                className="flex-1"
+                value={config.width}
+                onValueChange={v => updateConfig('width', v)}
+                min={300}
+                max={1000}
+              />
+              <Input
+                className="w-20"
+                type="number"
+                value={config.width}
+                onChange={e => updateConfig('width', Number(e.target.value))}
+                min={300}
+                max={1000}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="w-32">Height</label>
+              <RangeSlider
+                className="flex-1"
+                value={config.height}
+                onValueChange={v => updateConfig('height', v)}
+                min={300}
+                max={800}
+              />
+              <Input
+                className="w-20"
+                type="number"
+                value={config.height}
+                onChange={e => updateConfig('height', Number(e.target.value))}
+                min={300}
+                max={800}
+              />
+            </div>
+          </fieldset>
+          <fieldset className="space-y-2">
+            <legend className="font-semibold">Buckets</legend>
+            <div className="flex items-center gap-2">
+              <label className="w-32">Count</label>
+              <RangeSlider
+                className="flex-1"
+                value={config.bucketCount}
+                onValueChange={v => updateConfig('bucketCount', v)}
+                min={2}
+                max={10}
+              />
+              <Input
+                className="w-20"
+                type="number"
+                value={config.bucketCount}
+                onChange={e => updateConfig('bucketCount', Number(e.target.value))}
+                min={2}
+                max={10}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="w-32">Distribution</label>
+              <Select
+                className="w-auto"
+                value={config.bucketDistribution}
+                onChange={e =>
+                  updateConfig(
+                    'bucketDistribution',
+                    e.target.value as PlinkoConfig['bucketDistribution']
+                  )
+                }
+              >
+                <option value="even">Even</option>
+                <option value="middle">Middle-Weighted</option>
+                <option value="edge">Edge-Weighted</option>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="w-32">Destroy Balls</label>
+              <input
+                type="checkbox"
+                checked={config.destroyBalls}
+                onChange={e => updateConfig('destroyBalls', e.target.checked)}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="w-32">Rim Height</label>
+              <Input
+                className="w-20"
+                type="number"
+                value={config.rimHeight}
+                onChange={e => updateConfig('rimHeight', Number(e.target.value))}
+                min={10}
+                max={200}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="w-32">Rim Width</label>
+              <Input
+                className="w-20"
+                type="number"
+                value={config.rimWidth}
+                onChange={e => updateConfig('rimWidth', Number(e.target.value))}
+                min={5}
                 max={50}
               />
             </div>
           </fieldset>
           <fieldset className="space-y-2">
             <legend className="font-semibold">Win</legend>
-            <div className="grid grid-cols-2 gap-2 items-center">
-              <RangeSlider
-                value={config.winCount}
-                onValueChange={v => updateConfig('winCount', v)}
-                min={1}
-                max={config.ballCount}
-              />
-              <Input
-                type="number"
-                value={config.winCount}
-                onChange={e => updateConfig('winCount', Number(e.target.value))}
-                min={1}
-                max={config.ballCount}
-              />
-            </div>
             <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={config.autoStart}
-                onChange={e => updateConfig('autoStart', e.target.checked)}
-              />
-              <span>Auto Start</span>
+              <label className="w-32">Condition</label>
+              <Select
+                value={config.winCondition}
+                onChange={e =>
+                  updateConfig(
+                    'winCondition',
+                    e.target.value as PlinkoConfig['winCondition']
+                  )
+                }
+                className="w-auto"
+              >
+                <option value="nth">Nth ball</option>
+                <option value="most">Most balls</option>
+                <option value="first">First ball</option>
+                <option value="last-empty">Last empty</option>
+              </Select>
+              {config.winCondition === 'nth' && (
+                <Input
+                  className="w-20"
+                  type="number"
+                  value={config.winNth}
+                  onChange={e => updateConfig('winNth', Number(e.target.value))}
+                  min={1}
+                />
+              )}
             </div>
           </fieldset>
         </div>
