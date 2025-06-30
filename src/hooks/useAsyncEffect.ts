@@ -77,11 +77,15 @@ function wakeup(state: State, tag?: string): void {
       .then(cleanup => {
         state.lastCleanup = cleanup ?? undefined
         state.running = false
+        // // Use setTimeout to prevent stack overflow from recursive calls
+        // setTimeout(() => wakeup(state, tag), 0)
         wakeup(state, tag)
       })
       .catch(error => {
         console.error(error, { tag })
         state.running = false
+        // // Use setTimeout to prevent stack overflow from recursive calls
+        // setTimeout(() => wakeup(state, tag), 0)
         wakeup(state, tag)
       })
   }
