@@ -76,39 +76,21 @@ const defaultConfig: PlinkoConfig = {
 }
 
 export function Plinko({ initialConfig }: PlinkoProps) {
-  const renderCountRef = useRef(0)
-  renderCountRef.current++
-  
   const canvasRef = useRef<HTMLDivElement>(null)
   const engineRef = useRef<Matter.Engine | null>(null)
-  const runnerRef = useRef<Matter.Runner | null>(null)
   const [started, setStarted] = useState(false)
   const [config, setConfig] = useState<PlinkoConfig>(initialConfig ?? defaultConfig)
   const [showConfig, setShowConfig] = useState(false)
   const [boardKey, setBoardKey] = useState(0)
   const bucketBoundsRef = useRef<number[]>([])
-  const preserveBallsRef = useRef(false)
-  const restartRef = useRef(false)
 
-  const stopGame = useCallback((preserve: boolean): void => {
-    // Even if we want to preserve balls visually, we need to track this separately
-    // from the cleanup mechanism to avoid physics engine issues
-    preserveBallsRef.current = preserve
-    // Clear restart flag when stopping to prevent unwanted restarts
-    restartRef.current = false
+  const stopGame = useCallback((): void => {
     setStarted(false)
   }, [])
 
-  const startGame = useCallback((resetBoard: boolean = true): void => {
-    // Always ensure preserve flag is cleared when starting a new game
-    preserveBallsRef.current = false
-    
-    // Always reset the board when starting a new game to ensure clean state
-    // This will trigger boardSetupEffect which creates a fresh engine
-    if (resetBoard) {
-      setBoardKey(k => k + 1)
-    }
-    
+  const startGame = useCallback((): void => {
+    // Increment boardKey to create a fresh engine
+    setBoardKey(k => k + 1)
     setStarted(true)
   }, [])
 
@@ -116,28 +98,13 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     key: K,
     value: PlinkoConfig[K]
   ): void => {
-    // Consistent reset logic regardless of game state
-    if (started) {
-      // If game is running, set restart flag and stop
-      restartRef.current = true
-      stopGame(false)
-    } else {
-      // Whether game completed (preserve=true) or not, always reset cleanly
-      // Clear preserve flag so board recreation won't conflict with preserved balls
-      preserveBallsRef.current = false
-      setBoardKey(k => k + 1)
-    }
-    
-    // Update the config value
     setConfig(prev => ({ ...prev, [key]: value }))
-  }
-
-  useEffect(() => {
-    if (restartRef.current && !started && !preserveBallsRef.current) {
-      restartRef.current = false
-      startGame(false)
+    // Reset the board when config changes
+    if (started) {
+      setStarted(false)
     }
-  }, [config, started, startGame])
+    setBoardKey(k => k + 1)
+  }
 
   const makeShape = (
     type: "ball" | "square" | "triangle",
@@ -181,16 +148,13 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     return bounds
   }
 
-
+  // Board setup effect - creates fresh engine/runner each time boardKey changes
   useEffect(() => {
     if (canvasRef.current == null) return
 
-    // FIX: Create fresh engine and runner for each board setup to avoid
-    // circular reference issues in Matter.js when reusing engine/runner
     const engine = Engine.create()
     const runner = Runner.create()
     engineRef.current = engine
-    runnerRef.current = runner
 
     const { width, height } = config
     const render = Render.create({
@@ -264,16 +228,12 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     }
   }, [config, boardKey])
 
+  // Game logic effect - handles ball dropping and win conditions
   useEffect(() => {
-    if (!started) {
-      return
-    }
+    if (!started) return
 
     const engine = engineRef.current
-    if (engine === null) {
-      console.warn('[DEBUG] No engine available for game effect')
-      return
-    }
+    if (engine === null) return
 
     const { width, height } = config
     const bounds = bucketBoundsRef.current
@@ -311,7 +271,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     let finished = 0
     let gameEnded = false
     const afterUpdate = () => {
-      if (gameEnded) return // Prevent multiple stopGame calls
+      if (gameEnded) return
       balls.forEach((ball, index) => {
         if (ball.position.y > height - 60 && Math.abs(ball.velocity.y) < 1) {
           let bucket = -1
@@ -333,21 +293,21 @@ export function Plinko({ initialConfig }: PlinkoProps) {
               case "nth":
                 if (finished >= config.winNth) {
                   gameEnded = true
-                  stopGame(true)
+                  stopGame()
                   clearInterval(dropInterval)
                 }
                 break
               case "first":
                 if (finished >= 1) {
                   gameEnded = true
-                  stopGame(true)
+                  stopGame()
                   clearInterval(dropInterval)
                 }
                 break
               case "last-empty":
                 if (bucketCounts.filter(c => c === 0).length <= 1) {
                   gameEnded = true
-                  stopGame(true)
+                  stopGame()
                   clearInterval(dropInterval)
                 }
                 break
@@ -355,7 +315,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
               default:
                 if (finished >= config.ballCount && config.ballCount > 0) {
                   gameEnded = true
-                  stopGame(true)
+                  stopGame()
                   clearInterval(dropInterval)
                 }
                 break
@@ -370,17 +330,8 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     return () => {
       clearInterval(dropInterval)
       Events.off(engine, "afterUpdate", afterUpdate)
-      if (!preserveBallsRef.current) {
-        // Safely remove balls - they might have been cleared already by board recreation
-        balls.forEach(ball => {
-          // Check if the ball still exists in the world before trying to remove it
-          if (engine.world.bodies.includes(ball)) {
-            Composite.remove(engine.world, ball)
-          }
-        })
-      }
     }
-  }, [started, config])
+  }, [started, config, stopGame])
 
   return (
     <div className="space-y-2">
@@ -391,19 +342,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
         style={{ width: config.width, height: config.height }}
       />
       <div className="flex gap-2">
-        <Button onClick={() => {
-          if (started) {
-            stopGame(false)
-          } else {
-            // Force cleanup of any preserved objects before starting
-            // This prevents issues after a win condition
-            if (preserveBallsRef.current) {
-              preserveBallsRef.current = false
-              // startGame will create a fresh engine via setBoardKey
-            }
-            startGame(true)
-          }
-        }}>
+        <Button onClick={() => started ? stopGame() : startGame()}>
           {started ? 'Stop' : 'Start'}
         </Button>
         <Button variant="outline" onClick={() => setShowConfig(v => !v)}>
