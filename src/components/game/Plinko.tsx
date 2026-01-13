@@ -52,8 +52,8 @@ const defaultConfig: PlinkoConfig = {
   ballRestitution: 0.9,
   ballFriction: 0.005,
   ballShape: "ball",
-  destroyBalls: true,
-  dropLocation: "center",
+  destroyBalls: false,
+  dropLocation: "random",
   pinRadius: 3,
   pinRows: 10,
   pinColumns: 8,
@@ -66,7 +66,7 @@ const defaultConfig: PlinkoConfig = {
   ceilingGap: 50,
   wallThickness: 10,
   rimHeight: 100,
-  rimWidth: 10,
+  rimWidth: 5,
   bucketCount: 6,
   bucketDistribution: "even",
   winCondition: "nth",
@@ -163,17 +163,18 @@ export function Plinko({ initialConfig }: PlinkoProps) {
       options: { width, height, wireframes: false, background: "#f8fafc" }
     })
 
+    // Outer walls (ceiling, floor, left, right)
     const walls = [
-      Bodies.rectangle(width / 2, -25, width, 50, { isStatic: true }),
+      Bodies.rectangle(width / 2, -25, width, 50, { isStatic: true }), // ceiling
       Bodies.rectangle(
         width / 2,
-        height + config.rimWidth / 2,
+        height - config.wallThickness / 2,
         width,
-        config.rimWidth,
+        config.wallThickness,
         { isStatic: true }
-      ),
-      Bodies.rectangle(-25, height / 2, 50, height, { isStatic: true }),
-      Bodies.rectangle(width + 25, height / 2, 50, height, { isStatic: true })
+      ), // floor - positioned at bottom of canvas
+      Bodies.rectangle(-25, height / 2, 50, height, { isStatic: true }), // left
+      Bodies.rectangle(width + 25, height / 2, 50, height, { isStatic: true }) // right
     ]
 
     Composite.add(engine.world, walls)
@@ -201,6 +202,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     }
     Composite.add(engine.world, pins)
 
+    // Bucket dividers - use rimWidth for their thickness
     const bounds = bucketBounds(config.bucketCount, width, config.bucketDistribution)
     bucketBoundsRef.current = bounds
     for (const x of bounds) {
@@ -208,7 +210,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
         Bodies.rectangle(
           x,
           height - config.rimHeight / 2,
-          config.wallThickness,
+          config.rimWidth,
           config.rimHeight,
           { isStatic: true }
         )
