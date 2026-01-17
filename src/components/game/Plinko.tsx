@@ -12,6 +12,14 @@ import Matter, {
 import { Button } from "@/components/ui/button"
 import { Input, RangeSlider, Select } from "@/components/ui"
 
+interface PlayerProfile {
+  id: string
+  name: string
+  wins: number
+  active: boolean
+  avatarUrl?: string
+}
+
 export interface PlinkoConfig {
   ballCount: number
   ballRadius: number
@@ -75,6 +83,17 @@ const defaultConfig: PlinkoConfig = {
   height: 500
 }
 
+const playerStorageKey = "plinko.players.v1"
+
+const makePlayerId = (): string =>
+  `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
+
+const defaultPlayers: PlayerProfile[] = [
+  { id: makePlayerId(), name: "Avery", wins: 2, active: true },
+  { id: makePlayerId(), name: "Blake", wins: 4, active: true },
+  { id: makePlayerId(), name: "Casey", wins: 1, active: false }
+]
+
 export function Plinko({ initialConfig }: PlinkoProps) {
   const canvasRef = useRef<HTMLDivElement>(null)
   const engineRef = useRef<Matter.Engine | null>(null)
@@ -83,6 +102,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
   const [showConfig, setShowConfig] = useState(false)
   const [boardKey, setBoardKey] = useState(0)
   const bucketBoundsRef = useRef<number[]>([])
+  const [players, setPlayers] = useState<PlayerProfile[]>(defaultPlayers)
 
   const stopGame = useCallback((): void => {
     setStarted(false)
@@ -105,6 +125,75 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     }
     setBoardKey(k => k + 1)
   }
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(playerStorageKey)
+      if (stored != null) {
+        const parsed = JSON.parse(stored) as PlayerProfile[]
+        if (Array.isArray(parsed)) {
+          if (parsed.length >= 2) {
+            setPlayers(parsed)
+          } else {
+            const needed = 2 - parsed.length
+            const padded = [...parsed]
+            for (let i = 0; i < needed; i++) {
+              padded.push({
+                id: makePlayerId(),
+                name: `Player ${parsed.length + i + 1}`,
+                wins: 0,
+                active: true
+              })
+            }
+            setPlayers(padded)
+          }
+        }
+      }
+    } catch {
+      // If storage is invalid, fall back to defaults
+    }
+  }, [])
+
+  useEffect(() => {
+    localStorage.setItem(playerStorageKey, JSON.stringify(players))
+  }, [players])
+
+  const enrolledPlayers = players.filter(player => player.active)
+  const derivedBucketCount = Math.max(2, enrolledPlayers.length)
+
+  useEffect(() => {
+    if (config.bucketCount === derivedBucketCount) return
+    setConfig(prev => ({ ...prev, bucketCount: derivedBucketCount }))
+    if (started) {
+      setStarted(false)
+    }
+    setBoardKey(k => k + 1)
+  }, [config.bucketCount, derivedBucketCount, started])
+
+  const updatePlayer = (id: string, updater: (player: PlayerProfile) => PlayerProfile) => {
+    setPlayers(prev => prev.map(player => (player.id === id ? updater(player) : player)))
+  }
+
+  const addPlayer = () => {
+    setPlayers(prev => [
+      ...prev,
+      {
+        id: makePlayerId(),
+        name: `Player ${prev.length + 1}`,
+        wins: 0,
+        active: true
+      }
+    ])
+  }
+
+  const removePlayer = (id: string) => {
+    setPlayers(prev => {
+      if (prev.length <= 2) return prev
+      return prev.filter(player => player.id !== id)
+    })
+  }
+
+  const leaderboard = [...players].sort((a, b) => b.wins - a.wins)
 
   const makeShape = (
     type: "ball" | "square" | "triangle",
@@ -336,23 +425,24 @@ export function Plinko({ initialConfig }: PlinkoProps) {
   }, [started, config, stopGame])
 
   return (
-    <div className="space-y-2">
-      <div
-        key={boardKey}
-        className="border"
-        ref={canvasRef}
-        style={{ width: config.width, height: config.height }}
-      />
-      <div className="flex gap-2">
-        <Button onClick={() => started ? stopGame() : startGame()}>
-          {started ? 'Stop' : 'Start'}
-        </Button>
-        <Button variant="outline" onClick={() => setShowConfig(v => !v)}>
-          Config
-        </Button>
-      </div>
-      {showConfig && (
-        <div className="space-y-4 p-2 border rounded-md">
+    <div className="flex flex-col gap-6 lg:flex-row">
+      <div className="space-y-2">
+        <div
+          key={boardKey}
+          className="border"
+          ref={canvasRef}
+          style={{ width: config.width, height: config.height }}
+        />
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => started ? stopGame() : startGame()}>
+            {started ? 'Stop' : 'Start'}
+          </Button>
+          <Button variant="outline" onClick={() => setShowConfig(v => !v)}>
+            Config
+          </Button>
+        </div>
+        {showConfig && (
+          <div className="space-y-4 p-2 border rounded-md">
           <fieldset className="space-y-2">
             <legend className="font-semibold">Balls</legend>
             <div className="flex items-center gap-2">
@@ -636,20 +726,25 @@ export function Plinko({ initialConfig }: PlinkoProps) {
               <label className="w-32">Count</label>
               <RangeSlider
                 className="flex-1"
-                value={config.bucketCount}
-                onValueChange={v => updateConfig('bucketCount', v)}
+                value={derivedBucketCount}
+                onValueChange={() => {}}
                 min={2}
                 max={10}
+                disabled
               />
               <Input
                 className="w-20"
                 type="number"
-                value={config.bucketCount}
-                onChange={e => updateConfig('bucketCount', Number(e.target.value))}
+                value={derivedBucketCount}
+                onChange={() => {}}
                 min={2}
                 max={10}
+                disabled
               />
             </div>
+            <p className="text-xs text-slate-500">
+              Bucket count follows enrolled players ({enrolledPlayers.length})
+            </p>
             <div className="flex items-center gap-2">
               <label className="w-32">Distribution</label>
               <Select
@@ -729,7 +824,135 @@ export function Plinko({ initialConfig }: PlinkoProps) {
             </div>
           </fieldset>
         </div>
-      )}
+        )}
+      </div>
+
+      <aside className="w-full max-w-lg space-y-4">
+        <section className="border rounded-md p-3 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Players</h2>
+            <Button variant="outline" onClick={addPlayer}>Add player</Button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {players.map(player => (
+              <Button
+                key={player.id}
+                variant={player.active ? "default" : "outline"}
+                onClick={() =>
+                  updatePlayer(player.id, current => ({ ...current, active: !current.active }))
+                }
+              >
+                {player.name}
+              </Button>
+            ))}
+          </div>
+          <div className="space-y-3">
+            {players.map(player => {
+              const initials = player.name
+                .split(" ")
+                .filter(Boolean)
+                .slice(0, 2)
+                .map(part => part[0]?.toUpperCase())
+                .join("")
+              return (
+                <div key={player.id} className="flex items-center gap-3 border rounded-md p-2">
+                  {player.avatarUrl ? (
+                    <img
+                      src={player.avatarUrl}
+                      alt={`${player.name} avatar`}
+                      className="h-12 w-12 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="h-12 w-12 rounded-full bg-slate-200 flex items-center justify-center text-xs font-semibold text-slate-600">
+                      {initials || "PL"}
+                    </div>
+                  )}
+                  <div className="flex-1 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Input
+                        className="min-w-[140px]"
+                        value={player.name}
+                        onChange={e =>
+                          updatePlayer(player.id, current => ({
+                            ...current,
+                            name: e.target.value
+                          }))
+                        }
+                      />
+                      <Button
+                        variant={player.active ? "default" : "outline"}
+                        onClick={() =>
+                          updatePlayer(player.id, current => ({
+                            ...current,
+                            active: !current.active
+                          }))
+                        }
+                      >
+                        {player.active ? "Enrolled" : "Benched"}
+                      </Button>
+                      {/* TODO: implement image upload and storage */}
+                      <Button variant="outline" disabled>Upload image</Button>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <span className="w-16">Wins</span>
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          updatePlayer(player.id, current => ({
+                            ...current,
+                            wins: Math.max(0, current.wins - 1)
+                          }))
+                        }
+                      >
+                        -
+                      </Button>
+                      <span className="w-8 text-center">{player.wins}</span>
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          updatePlayer(player.id, current => ({
+                            ...current,
+                            wins: current.wins + 1
+                          }))
+                        }
+                      >
+                        +
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => removePlayer(player.id)}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+
+        <section className="border rounded-md p-3 space-y-2">
+          <h2 className="text-lg font-semibold">Leaderboard</h2>
+          <div className="space-y-2">
+            {leaderboard.map((player, index) => (
+              <div
+                key={player.id}
+                className="flex items-center justify-between text-sm border rounded-md px-3 py-2"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="w-5 text-slate-500">#{index + 1}</span>
+                  <span>{player.name}</span>
+                  <span className="text-xs text-slate-500">
+                    {player.active ? "Enrolled" : "Benched"}
+                  </span>
+                </div>
+                <span className="font-semibold">{player.wins} wins</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      </aside>
     </div>
   )
 }
