@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState, useEffect, useCallback } from "react"
+import { useRef, useState, useEffect, useCallback, useMemo } from "react"
 import Matter, {
   Engine,
   Render,
@@ -103,6 +103,9 @@ export function Plinko({ initialConfig }: PlinkoProps) {
   const [boardKey, setBoardKey] = useState(0)
   const bucketBoundsRef = useRef<number[]>([])
   const [players, setPlayers] = useState<PlayerProfile[]>(defaultPlayers)
+  const [bucketAssignments, setBucketAssignments] = useState<string[]>([])
+  const [roundWinnerBuckets, setRoundWinnerBuckets] = useState<number[] | null>(null)
+  const roundWinnerRef = useRef<number[] | null>(null)
 
   const stopGame = useCallback((): void => {
     setStarted(false)
@@ -112,7 +115,12 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     // Increment boardKey to create a fresh engine
     setBoardKey(k => k + 1)
     setStarted(true)
-  }, [])
+    roundWinnerRef.current = null
+    setRoundWinnerBuckets(null)
+    const activePlayers = players.filter(player => player.active)
+    const shuffled = [...activePlayers].sort(() => Math.random() - 0.5)
+    setBucketAssignments(shuffled.map(player => player.id))
+  }, [players])
 
   const updateConfig = <K extends keyof PlinkoConfig>(
     key: K,
@@ -194,6 +202,18 @@ export function Plinko({ initialConfig }: PlinkoProps) {
   }
 
   const leaderboard = [...players].sort((a, b) => b.wins - a.wins)
+  const topWins = leaderboard.length > 0 ? leaderboard[0].wins : 0
+  const hasWinner = topWins > 0
+  const winnerCount = hasWinner
+    ? leaderboard.filter(player => player.wins === topWins).length
+    : 0
+  const bucketByPlayer = useMemo(() => {
+    const map = new Map<string, number>()
+    bucketAssignments.forEach((playerId, index) => {
+      map.set(playerId, index)
+    })
+    return map
+  }, [bucketAssignments])
 
   const makeShape = (
     type: "ball" | "square" | "triangle",
@@ -383,6 +403,10 @@ export function Plinko({ initialConfig }: PlinkoProps) {
             switch (config.winCondition) {
               case "nth":
                 if (finished >= config.winNth) {
+                  if (roundWinnerRef.current === null) {
+                    roundWinnerRef.current = [bucket]
+                    setRoundWinnerBuckets([bucket])
+                  }
                   gameEnded = true
                   stopGame()
                   clearInterval(dropInterval)
@@ -390,21 +414,42 @@ export function Plinko({ initialConfig }: PlinkoProps) {
                 break
               case "first":
                 if (finished >= 1) {
+                  if (roundWinnerRef.current === null) {
+                    roundWinnerRef.current = [bucket]
+                    setRoundWinnerBuckets([bucket])
+                  }
                   gameEnded = true
                   stopGame()
                   clearInterval(dropInterval)
                 }
                 break
               case "last-empty":
-                if (bucketCounts.filter(c => c === 0).length <= 1) {
+                {
+                  const emptyBuckets = bucketCounts
+                    .map((count, idx) => (count === 0 ? idx : -1))
+                    .filter(idx => idx >= 0)
+                  if (roundWinnerRef.current === null && emptyBuckets.length === 1) {
+                    roundWinnerRef.current = [emptyBuckets[0]]
+                    setRoundWinnerBuckets([emptyBuckets[0]])
+                  }
+                  if (emptyBuckets.length <= 1) {
                   gameEnded = true
                   stopGame()
                   clearInterval(dropInterval)
+                  }
                 }
                 break
               case "most":
               default:
                 if (finished >= config.ballCount && config.ballCount > 0) {
+                  if (roundWinnerRef.current === null) {
+                    const maxCount = Math.max(...bucketCounts)
+                    const winners = bucketCounts
+                      .map((count, idx) => (count === maxCount ? idx : -1))
+                      .filter(idx => idx >= 0)
+                    roundWinnerRef.current = winners
+                    setRoundWinnerBuckets(winners)
+                  }
                   gameEnded = true
                   stopGame()
                   clearInterval(dropInterval)
@@ -854,6 +899,8 @@ export function Plinko({ initialConfig }: PlinkoProps) {
                 .slice(0, 2)
                 .map(part => part[0]?.toUpperCase())
                 .join("")
+              const assignedBucket = bucketByPlayer.get(player.id)
+              const isRoundWinner = roundWinnerBuckets?.includes(assignedBucket ?? -1) ?? false
               return (
                 <div key={player.id} className="flex items-center gap-3 border rounded-md p-2">
                   {player.avatarUrl ? (
@@ -890,6 +937,16 @@ export function Plinko({ initialConfig }: PlinkoProps) {
                       >
                         {player.active ? "Enrolled" : "Benched"}
                       </Button>
+                      {player.active && assignedBucket != null && (
+                        <span className="text-xs text-slate-500">
+                          Bucket {assignedBucket + 1}
+                        </span>
+                      )}
+                      {isRoundWinner && (
+                        <span className="text-[10px] uppercase tracking-wide text-emerald-600">
+                          Round winner
+                        </span>
+                      )}
                       {/* TODO: implement image upload and storage */}
                       <Button variant="outline" disabled>Upload image</Button>
                     </div>
@@ -934,6 +991,16 @@ export function Plinko({ initialConfig }: PlinkoProps) {
 
         <section className="border rounded-md p-3 space-y-2">
           <h2 className="text-lg font-semibold">Leaderboard</h2>
+          {roundWinnerBuckets != null && roundWinnerBuckets.length > 0 && (
+            <div className="text-xs text-slate-500">
+              Round winner: bucket {roundWinnerBuckets.map(bucket => bucket + 1).join(", ")}
+            </div>
+          )}
+          {hasWinner && (
+            <div className="text-xs text-slate-500">
+              {winnerCount > 1 ? "Co-winners" : "Winner"}: {topWins} wins
+            </div>
+          )}
           <div className="space-y-2">
             {leaderboard.map((player, index) => (
               <div
@@ -943,6 +1010,16 @@ export function Plinko({ initialConfig }: PlinkoProps) {
                 <div className="flex items-center gap-2">
                   <span className="w-5 text-slate-500">#{index + 1}</span>
                   <span>{player.name}</span>
+                  {roundWinnerBuckets?.includes(bucketByPlayer.get(player.id) ?? -1) && (
+                    <span className="text-[10px] uppercase tracking-wide text-emerald-600">
+                      Round winner
+                    </span>
+                  )}
+                  {hasWinner && player.wins === topWins && (
+                    <span className="text-[10px] uppercase tracking-wide text-emerald-600">
+                      Winner
+                    </span>
+                  )}
                   <span className="text-xs text-slate-500">
                     {player.active ? "Enrolled" : "Benched"}
                   </span>
