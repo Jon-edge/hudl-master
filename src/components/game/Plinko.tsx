@@ -77,7 +77,7 @@ const defaultConfig: PlinkoConfig = {
   rimWidth: 5,
   bucketCount: 6,
   bucketDistribution: "even",
-  winCondition: "nth",
+  winCondition: "most",
   winNth: 3,
   width: 500,
   height: 450
@@ -171,6 +171,11 @@ export function Plinko({ initialConfig }: PlinkoProps) {
   const [bucketAssignments, setBucketAssignments] = useState<string[]>([])
   const [roundWinnerBuckets, setRoundWinnerBuckets] = useState<number[] | null>(null)
   const roundWinnerRef = useRef<number[] | null>(null)
+  
+  // Server save UI state
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false)
+  const [saveMessage, setSaveMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
 
   const stopGame = useCallback((): void => {
     setStarted(false)
@@ -187,6 +192,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     setBucketAssignments(shuffled.map(player => player.id))
   }, [players])
 
+  // Update config (applies immediately, saves to localStorage)
   const updateConfig = <K extends keyof PlinkoConfig>(
     key: K,
     value: PlinkoConfig[K]
@@ -197,6 +203,33 @@ export function Plinko({ initialConfig }: PlinkoProps) {
       setStarted(false)
     }
     setBoardKey(k => k + 1)
+  }
+
+  // Save to server with confirmation
+  const handleSaveToServer = async (): Promise<void> => {
+    setIsSaving(true)
+    setShowSaveConfirm(false)
+    
+    try {
+      const configSuccess = await saveConfigToAPI(config)
+      const playersSuccess = await savePlayersToAPI(players)
+      
+      if (configSuccess && playersSuccess) {
+        setSaveMessage({ type: "success", text: "Settings and players saved to server successfully!" })
+      } else if (configSuccess) {
+        setSaveMessage({ type: "success", text: "Settings saved to server. Players may not have synced." })
+      } else if (playersSuccess) {
+        setSaveMessage({ type: "success", text: "Players saved to server. Settings may not have synced." })
+      } else {
+        setSaveMessage({ type: "error", text: "Could not save to server. Changes are saved locally." })
+      }
+    } catch {
+      setSaveMessage({ type: "error", text: "Error saving to server. Changes are saved locally." })
+    } finally {
+      setIsSaving(false)
+      // Auto-dismiss success message after 3 seconds
+      setTimeout(() => setSaveMessage(null), 4000)
+    }
   }
 
   // Load players from API (with localStorage fallback) on mount
@@ -765,8 +798,36 @@ export function Plinko({ initialConfig }: PlinkoProps) {
             Config
           </Button>
         </div>
-        {showConfig && (
-          <div className="space-y-4 p-2 border rounded-md">
+      </div>
+
+      {/* Right: Leaderboard OR Config panel */}
+      <aside className="w-full md:w-72 shrink-0">
+        {showConfig ? (
+          <div className="border rounded-md p-3 space-y-4 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between sticky top-0 bg-white pb-2 border-b">
+              <h2 className="text-sm font-semibold">Settings</h2>
+              <Button variant="outline" size="sm" onClick={() => setShowConfig(false)}>
+                Close
+              </Button>
+            </div>
+            <div className="flex gap-2">
+              <Button 
+                size="sm" 
+                onClick={() => setShowSaveConfirm(true)}
+                disabled={isSaving}
+              >
+                {isSaving ? "Saving..." : "Save to Server"}
+              </Button>
+            </div>
+            {saveMessage && (
+              <div className={`text-sm p-2 rounded ${
+                saveMessage.type === "success" 
+                  ? "bg-emerald-100 text-emerald-700" 
+                  : "bg-red-100 text-red-700"
+              }`}>
+                {saveMessage.text}
+              </div>
+            )}
           <fieldset className="space-y-2">
             <legend className="font-semibold">Balls</legend>
             <div className="flex items-center gap-2">
@@ -1288,6 +1349,38 @@ export function Plinko({ initialConfig }: PlinkoProps) {
               })}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Save to Server Confirmation Dialog */}
+      {showSaveConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-6 space-y-4">
+            <h2 className="text-lg font-semibold">Save to Server?</h2>
+            <p className="text-sm text-slate-600">
+              This will save your current settings and player data to the server, 
+              making them available across all devices and browsers.
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setShowSaveConfirm(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveToServer}>
+                Yes, Save to Server
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success/Error Toast (shown outside config panel too) */}
+      {saveMessage && !showConfig && (
+        <div className={`fixed bottom-4 right-4 z-50 p-4 rounded-lg shadow-lg ${
+          saveMessage.type === "success" 
+            ? "bg-emerald-100 text-emerald-700 border border-emerald-200" 
+            : "bg-red-100 text-red-700 border border-red-200"
+        }`}>
+          {saveMessage.text}
         </div>
       )}
     </div>
