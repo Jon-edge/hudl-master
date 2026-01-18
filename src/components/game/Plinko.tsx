@@ -77,10 +77,10 @@ const defaultConfig: PlinkoConfig = {
   rimWidth: 5,
   bucketCount: 6,
   bucketDistribution: "even",
-  winCondition: "nth",
+  winCondition: "first",
   winNth: 3,
-  width: 600,
-  height: 500
+  width: 500,
+  height: 450
 }
 
 const playerStorageKey = "plinko.players.v1"
@@ -100,6 +100,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
   const [started, setStarted] = useState(false)
   const [config, setConfig] = useState<PlinkoConfig>(initialConfig ?? defaultConfig)
   const [showConfig, setShowConfig] = useState(false)
+  const [showPlayerSettings, setShowPlayerSettings] = useState(false)
   const [boardKey, setBoardKey] = useState(0)
   const bucketBoundsRef = useRef<number[]>([])
   const [players, setPlayers] = useState<PlayerProfile[]>(defaultPlayers)
@@ -214,6 +215,38 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     })
     return map
   }, [bucketAssignments])
+
+  // Track bucket assignments in a ref to avoid stale closures
+  const bucketAssignmentsRef = useRef<string[]>([])
+  useEffect(() => {
+    bucketAssignmentsRef.current = bucketAssignments
+  }, [bucketAssignments])
+
+  // Increment wins when round ends
+  useEffect(() => {
+    if (roundWinnerBuckets === null || roundWinnerBuckets.length === 0) return
+    // Get winning player IDs from bucket assignments ref
+    const assignments = bucketAssignmentsRef.current
+    const winningPlayerIds = roundWinnerBuckets
+      .map(bucket => assignments[bucket])
+      .filter(id => id != null)
+    if (winningPlayerIds.length === 0) return
+    setPlayers(prev =>
+      prev.map(player =>
+        winningPlayerIds.includes(player.id)
+          ? { ...player, wins: player.wins + 1 }
+          : player
+      )
+    )
+  }, [roundWinnerBuckets])
+
+  // Helper to get placeholder avatar URL
+  const getAvatarUrl = (player: PlayerProfile): string => {
+    if (player.avatarUrl) return player.avatarUrl
+    // Use DiceBear API for placeholder avatars
+    const seed = encodeURIComponent(player.name || player.id)
+    return `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${seed}&size=48`
+  }
 
   const makeShape = (
     type: "ball" | "square" | "triangle",
@@ -470,14 +503,69 @@ export function Plinko({ initialConfig }: PlinkoProps) {
   }, [started, config, stopGame])
 
   return (
-    <div className="flex flex-col gap-6 lg:flex-row">
-      <div className="space-y-2">
+    <div className="flex flex-col gap-4 md:flex-row md:items-start md:gap-6">
+      {/* Left: Player selection toggles */}
+      <aside className="w-full md:w-56 space-y-3 shrink-0">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold">Players</h2>
+          <Button variant="outline" size="sm" onClick={() => setShowPlayerSettings(true)}>
+            Manage
+          </Button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {players.map(player => (
+            <Button
+              key={player.id}
+              variant={player.active ? "default" : "outline"}
+              size="sm"
+              onClick={() =>
+                updatePlayer(player.id, current => ({ ...current, active: !current.active }))
+              }
+            >
+              {player.name}
+            </Button>
+          ))}
+        </div>
+      </aside>
+
+      {/* Center: Game board */}
+      <div className="space-y-2 shrink-0">
         <div
           key={boardKey}
           className="border"
           ref={canvasRef}
           style={{ width: config.width, height: config.height }}
         />
+        {/* Player avatars under buckets */}
+        {bucketAssignments.length > 0 && (
+          <div
+            className="flex"
+            style={{ width: config.width }}
+          >
+            {bucketAssignments.map((playerId, bucketIndex) => {
+              const player = players.find(p => p.id === playerId)
+              if (!player) return null
+              const isWinner = roundWinnerBuckets?.includes(bucketIndex) ?? false
+              return (
+                <div
+                  key={playerId}
+                  className="flex flex-col items-center justify-center flex-1"
+                >
+                  <img
+                    src={getAvatarUrl(player)}
+                    alt={`${player.name} avatar`}
+                    className={`h-10 w-10 rounded-full object-cover border-2 ${
+                      isWinner ? "border-emerald-500 ring-2 ring-emerald-300" : "border-slate-200"
+                    }`}
+                  />
+                  <span className={`text-xs mt-1 truncate max-w-full ${isWinner ? "font-semibold text-emerald-600" : ""}`}>
+                    {player.name}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => started ? stopGame() : startGame()}>
             {started ? 'Stop' : 'Start'}
@@ -872,125 +960,10 @@ export function Plinko({ initialConfig }: PlinkoProps) {
         )}
       </div>
 
-      <aside className="w-full max-w-lg space-y-4">
-        <section className="border rounded-md p-3 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Players</h2>
-            <Button variant="outline" onClick={addPlayer}>Add player</Button>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {players.map(player => (
-              <Button
-                key={player.id}
-                variant={player.active ? "default" : "outline"}
-                onClick={() =>
-                  updatePlayer(player.id, current => ({ ...current, active: !current.active }))
-                }
-              >
-                {player.name}
-              </Button>
-            ))}
-          </div>
-          <div className="space-y-3">
-            {players.map(player => {
-              const initials = player.name
-                .split(" ")
-                .filter(Boolean)
-                .slice(0, 2)
-                .map(part => part[0]?.toUpperCase())
-                .join("")
-              const assignedBucket = bucketByPlayer.get(player.id)
-              const isRoundWinner = roundWinnerBuckets?.includes(assignedBucket ?? -1) ?? false
-              return (
-                <div key={player.id} className="flex items-center gap-3 border rounded-md p-2">
-                  {player.avatarUrl ? (
-                    <img
-                      src={player.avatarUrl}
-                      alt={`${player.name} avatar`}
-                      className="h-12 w-12 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="h-12 w-12 rounded-full bg-slate-200 flex items-center justify-center text-xs font-semibold text-slate-600">
-                      {initials || "PL"}
-                    </div>
-                  )}
-                  <div className="flex-1 space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Input
-                        className="min-w-[140px]"
-                        value={player.name}
-                        onChange={e =>
-                          updatePlayer(player.id, current => ({
-                            ...current,
-                            name: e.target.value
-                          }))
-                        }
-                      />
-                      <Button
-                        variant={player.active ? "default" : "outline"}
-                        onClick={() =>
-                          updatePlayer(player.id, current => ({
-                            ...current,
-                            active: !current.active
-                          }))
-                        }
-                      >
-                        {player.active ? "Enrolled" : "Benched"}
-                      </Button>
-                      {player.active && assignedBucket != null && (
-                        <span className="text-xs text-slate-500">
-                          Bucket {assignedBucket + 1}
-                        </span>
-                      )}
-                      {isRoundWinner && (
-                        <span className="text-[10px] uppercase tracking-wide text-emerald-600">
-                          Round winner
-                        </span>
-                      )}
-                      {/* TODO: implement image upload and storage */}
-                      <Button variant="outline" disabled>Upload image</Button>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 text-sm">
-                      <span className="w-16">Wins</span>
-                      <Button
-                        variant="outline"
-                        onClick={() =>
-                          updatePlayer(player.id, current => ({
-                            ...current,
-                            wins: Math.max(0, current.wins - 1)
-                          }))
-                        }
-                      >
-                        -
-                      </Button>
-                      <span className="w-8 text-center">{player.wins}</span>
-                      <Button
-                        variant="outline"
-                        onClick={() =>
-                          updatePlayer(player.id, current => ({
-                            ...current,
-                            wins: current.wins + 1
-                          }))
-                        }
-                      >
-                        +
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => removePlayer(player.id)}
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </section>
-
+      {/* Right: Leaderboard */}
+      <aside className="w-full md:w-64 shrink-0">
         <section className="border rounded-md p-3 space-y-2">
-          <h2 className="text-lg font-semibold">Leaderboard</h2>
+          <h2 className="text-sm font-semibold">Leaderboard</h2>
           {roundWinnerBuckets != null && roundWinnerBuckets.length > 0 && (
             <div className="text-xs text-slate-500">
               Round winner: bucket {roundWinnerBuckets.map(bucket => bucket + 1).join(", ")}
@@ -1020,16 +993,112 @@ export function Plinko({ initialConfig }: PlinkoProps) {
                       Winner
                     </span>
                   )}
-                  <span className="text-xs text-slate-500">
-                    {player.active ? "Enrolled" : "Benched"}
-                  </span>
                 </div>
-                <span className="font-semibold">{player.wins} wins</span>
+                <span className="font-semibold">{player.wins}</span>
               </div>
             ))}
           </div>
         </section>
       </aside>
+
+      {/* Player Settings Modal */}
+      {showPlayerSettings && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-xl max-h-[80vh] overflow-y-auto p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Manage Players</h2>
+              <Button variant="outline" onClick={() => setShowPlayerSettings(false)}>
+                Close
+              </Button>
+            </div>
+            <Button variant="outline" onClick={addPlayer}>Add player</Button>
+            <div className="space-y-3">
+              {players.map(player => {
+                const assignedBucket = bucketByPlayer.get(player.id)
+                const isRoundWinner = roundWinnerBuckets?.includes(assignedBucket ?? -1) ?? false
+                return (
+                  <div key={player.id} className="flex items-center gap-3 border rounded-md p-2">
+                    <img
+                      src={getAvatarUrl(player)}
+                      alt={`${player.name} avatar`}
+                      className="h-12 w-12 rounded-full object-cover"
+                    />
+                    <div className="flex-1 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Input
+                          className="min-w-[140px]"
+                          value={player.name}
+                          onChange={e =>
+                            updatePlayer(player.id, current => ({
+                              ...current,
+                              name: e.target.value
+                            }))
+                          }
+                        />
+                        <Button
+                          variant={player.active ? "default" : "outline"}
+                          onClick={() =>
+                            updatePlayer(player.id, current => ({
+                              ...current,
+                              active: !current.active
+                            }))
+                          }
+                        >
+                          {player.active ? "Enrolled" : "Benched"}
+                        </Button>
+                        {player.active && assignedBucket != null && (
+                          <span className="text-xs text-slate-500">
+                            Bucket {assignedBucket + 1}
+                          </span>
+                        )}
+                        {isRoundWinner && (
+                          <span className="text-[10px] uppercase tracking-wide text-emerald-600">
+                            Round winner
+                          </span>
+                        )}
+                        {/* TODO: implement image upload and storage */}
+                        <Button variant="outline" disabled>Upload image</Button>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-sm">
+                        <span className="w-16">Wins</span>
+                        <Button
+                          variant="outline"
+                          onClick={() =>
+                            updatePlayer(player.id, current => ({
+                              ...current,
+                              wins: Math.max(0, current.wins - 1)
+                            }))
+                          }
+                        >
+                          -
+                        </Button>
+                        <span className="w-8 text-center">{player.wins}</span>
+                        <Button
+                          variant="outline"
+                          onClick={() =>
+                            updatePlayer(player.id, current => ({
+                              ...current,
+                              wins: current.wins + 1
+                            }))
+                          }
+                        >
+                          +
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => removePlayer(player.id)}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
