@@ -381,50 +381,57 @@ export function Plinko({ initialConfig }: PlinkoProps) {
 
     const { width, height } = config
     const bounds = bucketBoundsRef.current
-    const balls: Matter.Body[] = []
-    const bucketCounts = new Array(config.bucketCount).fill(0)
+    let balls: Matter.Body[] = []
+    let bucketCounts = new Array(config.bucketCount).fill(0)
     let dropped = 0
-    const zig = { x: Math.random() * width, dir: 1 }
-
-    const dropInterval = setInterval(() => {
-      if (config.ballCount > 0 && dropped >= config.ballCount) {
-        clearInterval(dropInterval)
-        return
-      }
-      let x = width / 2
-      if (config.dropLocation === "random") {
-        x = Math.random() * width
-      } else if (config.dropLocation === "zigzag") {
-        x = zig.x
-        zig.x += (width / config.pinColumns) * zig.dir
-        if (zig.x < config.ballRadius || zig.x > width - config.ballRadius) {
-          zig.dir *= -1
-          zig.x = Math.max(config.ballRadius, Math.min(width - config.ballRadius, zig.x))
-        }
-      }
-      const ball = makeShape(config.ballShape, x, 0, config.ballRadius, {
-        restitution: config.ballRestitution,
-        friction: config.ballFriction,
-        angle: config.ballShape === "ball" ? 0 : Math.random() * Math.PI * 2
-      })
-      balls.push(ball)
-      Composite.add(engine.world, ball)
-      dropped += 1
-    }, 500)
-
     let finished = 0
     let gameEnded = false
-    const settledBalls = new Set<Matter.Body>()
-    // Track specific ball landing order for "first" and "nth" conditions
+    let settledBalls = new Set<Matter.Body>()
     let firstBallBucket: number | null = null
     let nthBallBucket: number | null = null
+    let tiebreakRound = 0
+    const ballsPerRound = config.ballCount
+    const zig = { x: Math.random() * width, dir: 1 }
+
+    let dropInterval: ReturnType<typeof setInterval> | null = null
+
+    const startDropping = () => {
+      dropInterval = setInterval(() => {
+        if (ballsPerRound > 0 && dropped >= ballsPerRound * (tiebreakRound + 1)) {
+          if (dropInterval) clearInterval(dropInterval)
+          dropInterval = null
+          return
+        }
+        let x = width / 2
+        if (config.dropLocation === "random") {
+          x = Math.random() * width
+        } else if (config.dropLocation === "zigzag") {
+          x = zig.x
+          zig.x += (width / config.pinColumns) * zig.dir
+          if (zig.x < config.ballRadius || zig.x > width - config.ballRadius) {
+            zig.dir *= -1
+            zig.x = Math.max(config.ballRadius, Math.min(width - config.ballRadius, zig.x))
+          }
+        }
+        const ball = makeShape(config.ballShape, x, 0, config.ballRadius, {
+          restitution: config.ballRestitution,
+          friction: config.ballFriction,
+          angle: config.ballShape === "ball" ? 0 : Math.random() * Math.PI * 2
+        })
+        balls.push(ball)
+        Composite.add(engine.world, ball)
+        dropped += 1
+      }, 500)
+    }
+
+    // Start initial ball dropping
+    startDropping()
 
     const afterUpdate = () => {
       if (gameEnded) return
 
       // Check each ball for settling
       balls.forEach((ball, index) => {
-        // Skip already settled balls
         if (settledBalls.has(ball)) return
 
         if (ball.position.y > height - 60 && Math.abs(ball.velocity.y) < 1) {
@@ -440,12 +447,14 @@ export function Plinko({ initialConfig }: PlinkoProps) {
             bucketCounts[bucket] += 1
             finished += 1
 
-            // Track first and nth ball for those win conditions
-            if (finished === 1) {
-              firstBallBucket = bucket
-            }
-            if (finished === config.winNth) {
-              nthBallBucket = bucket
+            // Track first and nth ball for those win conditions (only in first round)
+            if (tiebreakRound === 0) {
+              if (finished === 1) {
+                firstBallBucket = bucket
+              }
+              if (finished === config.winNth) {
+                nthBallBucket = bucket
+              }
             }
 
             if (config.destroyBalls) {
@@ -456,9 +465,10 @@ export function Plinko({ initialConfig }: PlinkoProps) {
         }
       })
 
-      // Only determine winner after ALL balls have settled
-      const allBallsDropped = config.ballCount > 0 && dropped >= config.ballCount
-      const allBallsSettled = allBallsDropped && finished >= config.ballCount
+      // Check if all balls for current round have settled
+      const expectedBalls = ballsPerRound * (tiebreakRound + 1)
+      const allBallsDropped = ballsPerRound > 0 && dropped >= expectedBalls
+      const allBallsSettled = allBallsDropped && finished >= expectedBalls
 
       if (allBallsSettled && roundWinnerRef.current === null) {
         let winnerBuckets: number[] = []
@@ -473,7 +483,6 @@ export function Plinko({ initialConfig }: PlinkoProps) {
             if (nthBallBucket !== null) {
               winnerBuckets = [nthBallBucket]
             } else if (firstBallBucket !== null) {
-              // Fallback to first if not enough balls
               winnerBuckets = [firstBallBucket]
             }
             break
@@ -485,7 +494,6 @@ export function Plinko({ initialConfig }: PlinkoProps) {
               if (emptyBuckets.length > 0) {
                 winnerBuckets = emptyBuckets
               } else {
-                // No empty buckets - find bucket with least balls
                 const minCount = Math.min(...bucketCounts)
                 winnerBuckets = bucketCounts
                   .map((count, idx) => (count === minCount ? idx : -1))
@@ -504,21 +512,34 @@ export function Plinko({ initialConfig }: PlinkoProps) {
             break
         }
 
-        if (winnerBuckets.length > 0) {
+        // Check for tie - if multiple winners, start tiebreaker
+        if (winnerBuckets.length > 1) {
+          // Clear all balls from the world
+          balls.forEach(ball => {
+            Composite.remove(engine.world, ball)
+          })
+          balls = []
+          settledBalls = new Set()
+          // Reset bucket counts for tiebreaker
+          bucketCounts = new Array(config.bucketCount).fill(0)
+          tiebreakRound += 1
+          // Start dropping more balls
+          startDropping()
+        } else if (winnerBuckets.length === 1) {
+          // Single winner - end the game
           roundWinnerRef.current = winnerBuckets
           setRoundWinnerBuckets(winnerBuckets)
+          gameEnded = true
+          stopGame()
+          if (dropInterval) clearInterval(dropInterval)
         }
-
-        gameEnded = true
-        stopGame()
-        clearInterval(dropInterval)
       }
     }
 
     Events.on(engine, "afterUpdate", afterUpdate)
 
     return () => {
-      clearInterval(dropInterval)
+      if (dropInterval) clearInterval(dropInterval)
       Events.off(engine, "afterUpdate", afterUpdate)
     }
   }, [started, config, stopGame])
