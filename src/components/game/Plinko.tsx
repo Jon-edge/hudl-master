@@ -84,6 +84,7 @@ const defaultConfig: PlinkoConfig = {
 }
 
 const playerStorageKey = "plinko.players.v2"
+const configStorageKey = "plinko.config.v1"
 
 const makePlayerId = (): string =>
   `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
@@ -143,6 +144,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     setBoardKey(k => k + 1)
   }
 
+  // Load players from localStorage on mount
   useEffect(() => {
     try {
       const stored = localStorage.getItem(playerStorageKey)
@@ -171,9 +173,30 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     }
   }, [])
 
+  // Save players to localStorage when changed
   useEffect(() => {
     localStorage.setItem(playerStorageKey, JSON.stringify(players))
   }, [players])
+
+  // Load config from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(configStorageKey)
+      if (stored != null) {
+        const parsed = JSON.parse(stored) as Partial<PlinkoConfig>
+        if (typeof parsed === "object" && parsed !== null) {
+          setConfig(prev => ({ ...prev, ...parsed }))
+        }
+      }
+    } catch {
+      // If storage is invalid, fall back to defaults
+    }
+  }, [])
+
+  // Save config to localStorage when changed
+  useEffect(() => {
+    localStorage.setItem(configStorageKey, JSON.stringify(config))
+  }, [config])
 
   const enrolledPlayers = players.filter(player => player.active)
   const derivedBucketCount = Math.max(2, enrolledPlayers.length)
