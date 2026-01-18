@@ -83,7 +83,7 @@ const defaultConfig: PlinkoConfig = {
   height: 450
 }
 
-const playerStorageKey = "plinko.players.v1"
+const playerStorageKey = "plinko.players.v2"
 
 const makePlayerId = (): string =>
   `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
