@@ -77,7 +77,7 @@ const defaultConfig: PlinkoConfig = {
   rimWidth: 5,
   bucketCount: 6,
   bucketDistribution: "even",
-  winCondition: "first",
+  winCondition: "nth",
   winNth: 3,
   width: 500,
   height: 450
@@ -414,9 +414,19 @@ export function Plinko({ initialConfig }: PlinkoProps) {
 
     let finished = 0
     let gameEnded = false
+    const settledBalls = new Set<Matter.Body>()
+    // Track specific ball landing order for "first" and "nth" conditions
+    let firstBallBucket: number | null = null
+    let nthBallBucket: number | null = null
+
     const afterUpdate = () => {
       if (gameEnded) return
+
+      // Check each ball for settling
       balls.forEach((ball, index) => {
+        // Skip already settled balls
+        if (settledBalls.has(ball)) return
+
         if (ball.position.y > height - 60 && Math.abs(ball.velocity.y) < 1) {
           let bucket = -1
           for (let i = 0; i < bounds.length - 1; i++) {
@@ -426,72 +436,83 @@ export function Plinko({ initialConfig }: PlinkoProps) {
             }
           }
           if (bucket >= 0 && bucket < bucketCounts.length) {
+            settledBalls.add(ball)
             bucketCounts[bucket] += 1
             finished += 1
+
+            // Track first and nth ball for those win conditions
+            if (finished === 1) {
+              firstBallBucket = bucket
+            }
+            if (finished === config.winNth) {
+              nthBallBucket = bucket
+            }
+
             if (config.destroyBalls) {
               Composite.remove(engine.world, ball)
               balls.splice(index, 1)
             }
-
-            switch (config.winCondition) {
-              case "nth":
-                if (finished >= config.winNth) {
-                  if (roundWinnerRef.current === null) {
-                    roundWinnerRef.current = [bucket]
-                    setRoundWinnerBuckets([bucket])
-                  }
-                  gameEnded = true
-                  stopGame()
-                  clearInterval(dropInterval)
-                }
-                break
-              case "first":
-                if (finished >= 1) {
-                  if (roundWinnerRef.current === null) {
-                    roundWinnerRef.current = [bucket]
-                    setRoundWinnerBuckets([bucket])
-                  }
-                  gameEnded = true
-                  stopGame()
-                  clearInterval(dropInterval)
-                }
-                break
-              case "last-empty":
-                {
-                  const emptyBuckets = bucketCounts
-                    .map((count, idx) => (count === 0 ? idx : -1))
-                    .filter(idx => idx >= 0)
-                  if (roundWinnerRef.current === null && emptyBuckets.length === 1) {
-                    roundWinnerRef.current = [emptyBuckets[0]]
-                    setRoundWinnerBuckets([emptyBuckets[0]])
-                  }
-                  if (emptyBuckets.length <= 1) {
-                  gameEnded = true
-                  stopGame()
-                  clearInterval(dropInterval)
-                  }
-                }
-                break
-              case "most":
-              default:
-                if (finished >= config.ballCount && config.ballCount > 0) {
-                  if (roundWinnerRef.current === null) {
-                    const maxCount = Math.max(...bucketCounts)
-                    const winners = bucketCounts
-                      .map((count, idx) => (count === maxCount ? idx : -1))
-                      .filter(idx => idx >= 0)
-                    roundWinnerRef.current = winners
-                    setRoundWinnerBuckets(winners)
-                  }
-                  gameEnded = true
-                  stopGame()
-                  clearInterval(dropInterval)
-                }
-                break
-            }
           }
         }
       })
+
+      // Only determine winner after ALL balls have settled
+      const allBallsDropped = config.ballCount > 0 && dropped >= config.ballCount
+      const allBallsSettled = allBallsDropped && finished >= config.ballCount
+
+      if (allBallsSettled && roundWinnerRef.current === null) {
+        let winnerBuckets: number[] = []
+
+        switch (config.winCondition) {
+          case "first":
+            if (firstBallBucket !== null) {
+              winnerBuckets = [firstBallBucket]
+            }
+            break
+          case "nth":
+            if (nthBallBucket !== null) {
+              winnerBuckets = [nthBallBucket]
+            } else if (firstBallBucket !== null) {
+              // Fallback to first if not enough balls
+              winnerBuckets = [firstBallBucket]
+            }
+            break
+          case "last-empty":
+            {
+              const emptyBuckets = bucketCounts
+                .map((count, idx) => (count === 0 ? idx : -1))
+                .filter(idx => idx >= 0)
+              if (emptyBuckets.length > 0) {
+                winnerBuckets = emptyBuckets
+              } else {
+                // No empty buckets - find bucket with least balls
+                const minCount = Math.min(...bucketCounts)
+                winnerBuckets = bucketCounts
+                  .map((count, idx) => (count === minCount ? idx : -1))
+                  .filter(idx => idx >= 0)
+              }
+            }
+            break
+          case "most":
+          default:
+            {
+              const maxCount = Math.max(...bucketCounts)
+              winnerBuckets = bucketCounts
+                .map((count, idx) => (count === maxCount ? idx : -1))
+                .filter(idx => idx >= 0)
+            }
+            break
+        }
+
+        if (winnerBuckets.length > 0) {
+          roundWinnerRef.current = winnerBuckets
+          setRoundWinnerBuckets(winnerBuckets)
+        }
+
+        gameEnded = true
+        stopGame()
+        clearInterval(dropInterval)
+      }
     }
 
     Events.on(engine, "afterUpdate", afterUpdate)
