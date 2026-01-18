@@ -89,9 +89,17 @@ const makePlayerId = (): string =>
   `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
 
 const defaultPlayers: PlayerProfile[] = [
-  { id: makePlayerId(), name: "Avery", wins: 2, active: true },
-  { id: makePlayerId(), name: "Blake", wins: 4, active: true },
-  { id: makePlayerId(), name: "Casey", wins: 1, active: false }
+  { id: makePlayerId(), name: "Jon", wins: 0, active: true },
+  { id: makePlayerId(), name: "Sam", wins: 0, active: true },
+  { id: makePlayerId(), name: "Matt", wins: 0, active: true },
+  { id: makePlayerId(), name: "William", wins: 0, active: true },
+  { id: makePlayerId(), name: "Paul", wins: 0, active: true },
+  { id: makePlayerId(), name: "Cache", wins: 0, active: true },
+  { id: makePlayerId(), name: "Jared", wins: 0, active: true },
+  { id: makePlayerId(), name: "Daniel", wins: 0, active: true },
+  { id: makePlayerId(), name: "Alberto", wins: 0, active: true },
+  { id: makePlayerId(), name: "Elizabeth", wins: 0, active: true },
+  { id: makePlayerId(), name: "Madison", wins: 0, active: true }
 ]
 
 export function Plinko({ initialConfig }: PlinkoProps) {
