@@ -1,6 +1,7 @@
 "use client"
 
 import { useRef, useState, useEffect, useCallback, useMemo } from "react"
+import Image from "next/image"
 import Matter, {
   Engine,
   Render,
@@ -92,7 +93,7 @@ async function loadPlayersFromAPI(): Promise<PlayerProfile[] | null> {
     const response = await fetch("/api/plinko/players")
     if (!response.ok) return null
     const data = await response.json()
-    if (data.fallback) return null
+    if (data.fallback === true) return null
     return data.players
   } catch {
     return null
@@ -108,7 +109,7 @@ async function savePlayersToAPI(players: PlayerProfile[]): Promise<boolean> {
     })
     if (!response.ok) return false
     const data = await response.json()
-    return !data.fallback && data.success
+    return data.fallback !== true && data.success === true
   } catch {
     return false
   }
@@ -119,7 +120,7 @@ async function loadConfigFromAPI(): Promise<Partial<PlinkoConfig> | null> {
     const response = await fetch("/api/plinko/config")
     if (!response.ok) return null
     const data = await response.json()
-    if (data.fallback) return null
+    if (data.fallback === true) return null
     return data.config
   } catch {
     return null
@@ -135,7 +136,7 @@ async function saveConfigToAPI(config: PlinkoConfig): Promise<boolean> {
     })
     if (!response.ok) return false
     const data = await response.json()
-    return !data.fallback && data.success
+    return data.fallback !== true && data.success === true
   } catch {
     return false
   }
@@ -237,7 +238,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     async function loadPlayers() {
       // Try API first
       const apiPlayers = await loadPlayersFromAPI()
-      if (apiPlayers && Array.isArray(apiPlayers)) {
+      if (apiPlayers != null && Array.isArray(apiPlayers)) {
         if (apiPlayers.length >= 2) {
           setPlayers(apiPlayers)
           return
@@ -310,7 +311,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     async function loadConfig() {
       // Try API first
       const apiConfig = await loadConfigFromAPI()
-      if (apiConfig && typeof apiConfig === "object") {
+      if (apiConfig != null && typeof apiConfig === "object") {
         setConfig(prev => ({ ...prev, ...apiConfig }))
         return
       }
@@ -424,7 +425,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
 
   // Helper to get placeholder avatar URL
   const getAvatarUrl = (player: PlayerProfile): string => {
-    if (player.avatarUrl) return player.avatarUrl
+    if (player.avatarUrl != null && player.avatarUrl.trim() !== "") return player.avatarUrl
     // Use DiceBear API for placeholder avatars
     const seed = encodeURIComponent(player.name || player.id)
     return `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${seed}&size=48`
@@ -580,7 +581,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     const startDropping = () => {
       dropInterval = setInterval(() => {
         if (ballsPerRound > 0 && dropped >= ballsPerRound * (tiebreakRound + 1)) {
-          if (dropInterval) clearInterval(dropInterval)
+          if (dropInterval != null) clearInterval(dropInterval)
           dropInterval = null
           return
         }
@@ -713,7 +714,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
           setRoundWinnerBuckets(winnerBuckets)
           gameEnded = true
           stopGame()
-          if (dropInterval) clearInterval(dropInterval)
+          if (dropInterval != null) clearInterval(dropInterval)
         }
       }
     }
@@ -721,7 +722,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     Events.on(engine, "afterUpdate", afterUpdate)
 
     return () => {
-      if (dropInterval) clearInterval(dropInterval)
+      if (dropInterval != null) clearInterval(dropInterval)
       Events.off(engine, "afterUpdate", afterUpdate)
     }
   }, [started, config, stopGame])
@@ -768,16 +769,18 @@ export function Plinko({ initialConfig }: PlinkoProps) {
           >
             {bucketAssignments.map((playerId, bucketIndex) => {
               const player = players.find(p => p.id === playerId)
-              if (!player) return null
+              if (player == null) return null
               const isWinner = roundWinnerBuckets?.includes(bucketIndex) ?? false
               return (
                 <div
                   key={playerId}
                   className="flex flex-col items-center justify-center flex-1"
                 >
-                  <img
+                  <Image
                     src={getAvatarUrl(player)}
                     alt={`${player.name} avatar`}
+                    width={40}
+                    height={40}
                     className={`h-10 w-10 rounded-full object-cover border-2 ${
                       isWinner ? "border-emerald-500 ring-2 ring-emerald-300" : "border-slate-200"
                     }`}
@@ -819,7 +822,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
                 {isSaving ? "Saving..." : "Save to Server"}
               </Button>
             </div>
-            {saveMessage && (
+            {saveMessage != null && (
               <div className={`text-sm p-2 rounded ${
                 saveMessage.type === "success" 
                   ? "bg-emerald-100 text-emerald-700" 
@@ -1232,7 +1235,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
                   <div className="flex items-center gap-2">
                     <span className="w-5 text-slate-500">#{index + 1}</span>
                     <span>{player.name}</span>
-                    {roundWinnerBuckets?.includes(bucketByPlayer.get(player.id) ?? -1) && (
+                    {((roundWinnerBuckets?.includes(bucketByPlayer.get(player.id) ?? -1)) ?? false) && (
                       <span className="text-[10px] uppercase tracking-wide text-emerald-600">
                         Round winner
                       </span>
@@ -1268,9 +1271,11 @@ export function Plinko({ initialConfig }: PlinkoProps) {
                 const isRoundWinner = roundWinnerBuckets?.includes(assignedBucket ?? -1) ?? false
                 return (
                   <div key={player.id} className="flex items-center gap-3 border rounded-md p-2">
-                    <img
+                    <Image
                       src={getAvatarUrl(player)}
                       alt={`${player.name} avatar`}
+                      width={48}
+                      height={48}
                       className="h-12 w-12 rounded-full object-cover"
                     />
                     <div className="flex-1 space-y-2">
@@ -1372,7 +1377,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
       )}
 
       {/* Success/Error Toast (shown outside config panel too) */}
-      {saveMessage && !showConfig && (
+      {saveMessage != null && !showConfig && (
         <div className={`fixed bottom-4 right-4 z-50 p-4 rounded-lg shadow-lg ${
           saveMessage.type === "success" 
             ? "bg-emerald-100 text-emerald-700 border border-emerald-200" 
