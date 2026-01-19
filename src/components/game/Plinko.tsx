@@ -257,23 +257,26 @@ export function Plinko({ initialConfig }: PlinkoProps) {
       // Try API first
       const apiPlayers = await loadPlayersFromAPI()
       if (apiPlayers != null && Array.isArray(apiPlayers)) {
+        if (apiPlayers.length === 0) {
+          setPlayers(applyDefaultAvatars(defaultPlayers))
+          return
+        }
         if (apiPlayers.length >= 2) {
           setPlayers(applyDefaultAvatars(apiPlayers))
           return
-        } else {
-          const needed = 2 - apiPlayers.length
-          const padded = [...apiPlayers]
-          for (let i = 0; i < needed; i++) {
-            padded.push({
-              id: makePlayerId(),
-              name: `Player ${apiPlayers.length + i + 1}`,
-              wins: 0,
-              active: true
-            })
-          }
-          setPlayers(applyDefaultAvatars(padded))
-          return
         }
+        const needed = 2 - apiPlayers.length
+        const padded = [...apiPlayers]
+        for (let i = 0; i < needed; i++) {
+          padded.push({
+            id: makePlayerId(),
+            name: `Player ${apiPlayers.length + i + 1}`,
+            wins: 0,
+            active: true
+          })
+        }
+        setPlayers(applyDefaultAvatars(padded))
+        return
       }
 
       // Fallback to localStorage
@@ -282,21 +285,25 @@ export function Plinko({ initialConfig }: PlinkoProps) {
         if (stored != null) {
           const parsed = JSON.parse(stored) as PlayerProfile[]
           if (Array.isArray(parsed)) {
+            if (parsed.length === 0) {
+              setPlayers(applyDefaultAvatars(defaultPlayers))
+              return
+            }
             if (parsed.length >= 2) {
               setPlayers(applyDefaultAvatars(parsed))
-            } else {
-              const needed = 2 - parsed.length
-              const padded = [...parsed]
-              for (let i = 0; i < needed; i++) {
-                padded.push({
-                  id: makePlayerId(),
-                  name: `Player ${parsed.length + i + 1}`,
-                  wins: 0,
-                  active: true
-                })
-              }
-              setPlayers(applyDefaultAvatars(padded))
+              return
             }
+            const needed = 2 - parsed.length
+            const padded = [...parsed]
+            for (let i = 0; i < needed; i++) {
+              padded.push({
+                id: makePlayerId(),
+                name: `Player ${parsed.length + i + 1}`,
+                wins: 0,
+                active: true
+              })
+            }
+            setPlayers(applyDefaultAvatars(padded))
           }
         }
       } catch {
