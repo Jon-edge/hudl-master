@@ -187,6 +187,7 @@ const applyDefaultAvatars = (profiles: PlayerProfile[]): PlayerProfile[] =>
 export function Plinko({ initialConfig }: PlinkoProps) {
   const canvasRef = useRef<HTMLDivElement>(null)
   const engineRef = useRef<Matter.Engine | null>(null)
+  const runnerRef = useRef<Matter.Runner | null>(null)
   const [started, setStarted] = useState(false)
   const [config, setConfig] = useState<PlinkoConfig>(initialConfig ?? defaultConfig)
   const [showConfig, setShowConfig] = useState(false)
@@ -199,6 +200,8 @@ export function Plinko({ initialConfig }: PlinkoProps) {
   const [bucketAssignments, setBucketAssignments] = useState<string[]>([])
   const [roundWinnerBuckets, setRoundWinnerBuckets] = useState<number[] | null>(null)
   const roundWinnerRef = useRef<number[] | null>(null)
+  const allowWinCountRef = useRef(false)
+  const hasStartedOnceRef = useRef(false)
   
   // Server save UI state
   const [showSaveConfirm, setShowSaveConfirm] = useState(false)
@@ -215,8 +218,25 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     wasPlayerSettingsOpenRef.current = showPlayerSettings
   }, [players, showPlayerSettings])
 
-  const stopGame = useCallback((): void => {
+  const stopGame = useCallback((reason: "manual" | "auto" = "manual"): void => {
     setStarted(false)
+    if (runnerRef.current != null) {
+      Runner.stop(runnerRef.current)
+    }
+    if (reason === "manual") {
+      allowWinCountRef.current = false
+      roundWinnerRef.current = null
+      setRoundWinnerBuckets(null)
+    }
+  }, [])
+
+  const assignBuckets = useCallback((activePlayers: PlayerProfile[]) => {
+    if (activePlayers.length === 0) {
+      setBucketAssignments([])
+      return
+    }
+    const shuffled = [...activePlayers].sort(() => Math.random() - 0.5)
+    setBucketAssignments(shuffled.map(player => player.id))
   }, [])
 
   const startGame = useCallback((): void => {
@@ -224,13 +244,16 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     setBoardKey(k => k + 1)
     setStarted(true)
     roundWinnerRef.current = null
+    allowWinCountRef.current = true
     setRoundWinnerBuckets(null)
-    const activePlayers = players.filter(
-      player => player.active && player.archived !== true
-    )
-    const shuffled = [...activePlayers].sort(() => Math.random() - 0.5)
-    setBucketAssignments(shuffled.map(player => player.id))
-  }, [players])
+    if (hasStartedOnceRef.current) {
+      const activePlayers = players.filter(
+        player => player.active && player.archived !== true
+      )
+      assignBuckets(activePlayers)
+    }
+    hasStartedOnceRef.current = true
+  }, [assignBuckets, players])
 
   // Update config (applies immediately, saves to localStorage)
   const updateConfig = <K extends keyof PlinkoConfig>(
@@ -423,10 +446,31 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     saveConfig()
   }, [config])
 
-  const visiblePlayers = players.filter(player => player.archived !== true)
-  const draftVisiblePlayers = draftPlayers.filter(player => player.archived !== true)
-  const enrolledPlayers = visiblePlayers.filter(player => player.active)
+  const visiblePlayers = useMemo(
+    () => players.filter(player => player.archived !== true),
+    [players]
+  )
+  const draftVisiblePlayers = useMemo(
+    () => draftPlayers.filter(player => player.archived !== true),
+    [draftPlayers]
+  )
+  const enrolledPlayers = useMemo(
+    () => players.filter(player => player.active && player.archived !== true),
+    [players]
+  )
+  const enrolledPlayersRef = useRef(enrolledPlayers)
+  useEffect(() => {
+    enrolledPlayersRef.current = enrolledPlayers
+  }, [enrolledPlayers])
+  const enrolledPlayerIds = useMemo(
+    () => enrolledPlayers.map(player => player.id).join("|"),
+    [enrolledPlayers]
+  )
   const derivedBucketCount = Math.max(2, enrolledPlayers.length)
+
+  useEffect(() => {
+    assignBuckets(enrolledPlayersRef.current)
+  }, [assignBuckets, enrolledPlayerIds])
 
   useEffect(() => {
     if (config.bucketCount === derivedBucketCount) return
@@ -618,6 +662,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
 
   // Increment wins when round ends
   useEffect(() => {
+    if (!allowWinCountRef.current) return
     if (roundWinnerBuckets === null || roundWinnerBuckets.length === 0) return
     // Get winning player IDs from bucket assignments ref
     const assignments = bucketAssignmentsRef.current
@@ -632,6 +677,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
           : player
       )
     )
+    allowWinCountRef.current = false
   }, [roundWinnerBuckets, updatePlayersImmediate])
 
   // Helper to get placeholder avatar URL
@@ -691,6 +737,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     const engine = Engine.create()
     const runner = Runner.create()
     engineRef.current = engine
+    runnerRef.current = runner
 
     const { width, height } = config
     const render = Render.create({
@@ -762,6 +809,9 @@ export function Plinko({ initialConfig }: PlinkoProps) {
       Engine.clear(engine)
       if (render.canvas.parentNode != null) {
         render.canvas.parentNode.removeChild(render.canvas)
+      }
+      if (runnerRef.current === runner) {
+        runnerRef.current = null
       }
     }
   }, [config, boardKey])
@@ -924,7 +974,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
           roundWinnerRef.current = winnerBuckets
           setRoundWinnerBuckets(winnerBuckets)
           gameEnded = true
-          stopGame()
+          stopGame("auto")
           if (dropInterval != null) clearInterval(dropInterval)
         }
       }
@@ -1006,7 +1056,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
           </div>
         )}
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => started ? stopGame() : startGame()}>
+          <Button onClick={() => started ? stopGame("manual") : startGame()}>
             {started ? 'Stop' : 'Start'}
           </Button>
           <Button variant="outline" onClick={() => setShowConfig(v => !v)}>
