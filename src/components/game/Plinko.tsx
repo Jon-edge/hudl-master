@@ -19,6 +19,7 @@ interface PlayerProfile {
   wins: number
   active: boolean
   avatarUrl?: string
+  archived?: boolean
 }
 
 export interface PlinkoConfig {
@@ -159,7 +160,7 @@ const defaultPlayers: PlayerProfile[] = [
   { id: makePlayerId(), name: "RJ", wins: 0, active: true, avatarUrl: "https://ca.slack-edge.com/T08U86VNU-U0990R1S6-b47fdae676a6-192" },
   { id: makePlayerId(), name: "Sam", wins: 0, active: true, avatarUrl: "https://ca.slack-edge.com/T08U86VNU-U01DXBN6A3S-8720534b422b-512" },
   { id: makePlayerId(), name: "William", wins: 0, active: true, avatarUrl: "https://ca.slack-edge.com/T08U86VNU-U0ABCTX5H-g37aa34e7410-192" },
-]
+].map(player => ({ ...player, archived: false }))
 
 const defaultAvatarByName = new Map(
   defaultPlayers
@@ -167,8 +168,14 @@ const defaultAvatarByName = new Map(
     .map(player => [player.name.toLowerCase(), player.avatarUrl as string])
 )
 
+const normalizePlayers = (profiles: PlayerProfile[]): PlayerProfile[] =>
+  profiles.map(profile => ({
+    ...profile,
+    archived: profile.archived ?? false
+  }))
+
 const applyDefaultAvatars = (profiles: PlayerProfile[]): PlayerProfile[] =>
-  profiles.map(profile => {
+  normalizePlayers(profiles).map(profile => {
     if (profile.avatarUrl != null && profile.avatarUrl.trim() !== "") {
       return profile
     }
@@ -187,6 +194,8 @@ export function Plinko({ initialConfig }: PlinkoProps) {
   const [boardKey, setBoardKey] = useState(0)
   const bucketBoundsRef = useRef<number[]>([])
   const [players, setPlayers] = useState<PlayerProfile[]>(defaultPlayers)
+  const [draftPlayers, setDraftPlayers] = useState<PlayerProfile[]>(defaultPlayers)
+  const [playersDirty, setPlayersDirty] = useState(false)
   const [bucketAssignments, setBucketAssignments] = useState<string[]>([])
   const [roundWinnerBuckets, setRoundWinnerBuckets] = useState<number[] | null>(null)
   const roundWinnerRef = useRef<number[] | null>(null)
@@ -195,6 +204,16 @@ export function Plinko({ initialConfig }: PlinkoProps) {
   const [showSaveConfirm, setShowSaveConfirm] = useState(false)
   const [saveMessage, setSaveMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [uploadingPlayerId, setUploadingPlayerId] = useState<string | null>(null)
+
+  const wasPlayerSettingsOpenRef = useRef(false)
+  useEffect(() => {
+    if (showPlayerSettings && !wasPlayerSettingsOpenRef.current) {
+      setDraftPlayers(players)
+      setPlayersDirty(false)
+    }
+    wasPlayerSettingsOpenRef.current = showPlayerSettings
+  }, [players, showPlayerSettings])
 
   const stopGame = useCallback((): void => {
     setStarted(false)
@@ -206,7 +225,9 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     setStarted(true)
     roundWinnerRef.current = null
     setRoundWinnerBuckets(null)
-    const activePlayers = players.filter(player => player.active)
+    const activePlayers = players.filter(
+      player => player.active && player.archived !== true
+    )
     const shuffled = [...activePlayers].sort(() => Math.random() - 0.5)
     setBucketAssignments(shuffled.map(player => player.id))
   }, [players])
@@ -224,15 +245,40 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     setBoardKey(k => k + 1)
   }
 
+  const persistPlayers = useCallback(async (nextPlayers: PlayerProfile[]): Promise<boolean> => {
+    localStorage.setItem(playerStorageKey, JSON.stringify(nextPlayers))
+    return await savePlayersToAPI(nextPlayers)
+  }, [])
+
+  const handleSavePlayers = async (): Promise<void> => {
+    setIsSaving(true)
+    try {
+      const playersSuccess = await persistPlayers(draftPlayers)
+      if (playersSuccess) {
+        setPlayers(draftPlayers)
+        setPlayersDirty(false)
+        setSaveMessage({ type: "success", text: "Players saved to server successfully!" })
+      } else {
+        setSaveMessage({ type: "error", text: "Could not save players to server. Changes are local only." })
+      }
+    } catch {
+      setSaveMessage({ type: "error", text: "Error saving players. Changes are local only." })
+    } finally {
+      setIsSaving(false)
+      setTimeout(() => setSaveMessage(null), 4000)
+      setShowPlayerSettings(false)
+    }
+  }
+
   // Save to server with confirmation
   const handleSaveToServer = async (): Promise<void> => {
     setIsSaving(true)
     setShowSaveConfirm(false)
-    
+
     try {
       const configSuccess = await saveConfigToAPI(config)
-      const playersSuccess = await savePlayersToAPI(players)
-      
+      const playersSuccess = await persistPlayers(players)
+
       if (configSuccess && playersSuccess) {
         setSaveMessage({ type: "success", text: "Settings and players saved to server successfully!" })
       } else if (configSuccess) {
@@ -240,10 +286,10 @@ export function Plinko({ initialConfig }: PlinkoProps) {
       } else if (playersSuccess) {
         setSaveMessage({ type: "success", text: "Players saved to server. Settings may not have synced." })
       } else {
-        setSaveMessage({ type: "error", text: "Could not save to server. Changes are saved locally." })
+        setSaveMessage({ type: "error", text: "Could not save to server. Changes are local only." })
       }
     } catch {
-      setSaveMessage({ type: "error", text: "Error saving to server. Changes are saved locally." })
+      setSaveMessage({ type: "error", text: "Error saving to server. Changes are local only." })
     } finally {
       setIsSaving(false)
       // Auto-dismiss success message after 3 seconds
@@ -258,11 +304,17 @@ export function Plinko({ initialConfig }: PlinkoProps) {
       const apiPlayers = await loadPlayersFromAPI()
       if (apiPlayers != null && Array.isArray(apiPlayers)) {
         if (apiPlayers.length === 0) {
-          setPlayers(applyDefaultAvatars(defaultPlayers))
+          const seeded = applyDefaultAvatars(defaultPlayers)
+          setPlayers(seeded)
+          setDraftPlayers(seeded)
+          setPlayersDirty(false)
           return
         }
         if (apiPlayers.length >= 2) {
-          setPlayers(applyDefaultAvatars(apiPlayers))
+          const seeded = applyDefaultAvatars(apiPlayers)
+          setPlayers(seeded)
+          setDraftPlayers(seeded)
+          setPlayersDirty(false)
           return
         }
         const needed = 2 - apiPlayers.length
@@ -275,7 +327,10 @@ export function Plinko({ initialConfig }: PlinkoProps) {
             active: true
           })
         }
-        setPlayers(applyDefaultAvatars(padded))
+        const seeded = applyDefaultAvatars(padded)
+        setPlayers(seeded)
+        setDraftPlayers(seeded)
+        setPlayersDirty(false)
         return
       }
 
@@ -286,11 +341,17 @@ export function Plinko({ initialConfig }: PlinkoProps) {
           const parsed = JSON.parse(stored) as PlayerProfile[]
           if (Array.isArray(parsed)) {
             if (parsed.length === 0) {
-              setPlayers(applyDefaultAvatars(defaultPlayers))
+              const seeded = applyDefaultAvatars(defaultPlayers)
+              setPlayers(seeded)
+              setDraftPlayers(seeded)
+              setPlayersDirty(false)
               return
             }
             if (parsed.length >= 2) {
-              setPlayers(applyDefaultAvatars(parsed))
+              const seeded = applyDefaultAvatars(parsed)
+              setPlayers(seeded)
+              setDraftPlayers(seeded)
+              setPlayersDirty(false)
               return
             }
             const needed = 2 - parsed.length
@@ -303,7 +364,10 @@ export function Plinko({ initialConfig }: PlinkoProps) {
                 active: true
               })
             }
-            setPlayers(applyDefaultAvatars(padded))
+            const seeded = applyDefaultAvatars(padded)
+            setPlayers(seeded)
+            setDraftPlayers(seeded)
+            setPlayersDirty(false)
           }
         }
       } catch {
@@ -313,23 +377,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     loadPlayers()
   }, [])
 
-  // Save players to API (with localStorage fallback) when changed
-  const playersInitRef = useRef(false)
-  useEffect(() => {
-    // Skip the initial render to avoid overwriting server data with defaults
-    if (!playersInitRef.current) {
-      playersInitRef.current = true
-      return
-    }
-    
-    async function savePlayers() {
-      // Always save to localStorage as backup
-      localStorage.setItem(playerStorageKey, JSON.stringify(players))
-      // Try to save to API
-      await savePlayersToAPI(players)
-    }
-    savePlayers()
-  }, [players])
+  // Players are persisted only when explicitly saved
 
   // Load config from API (with localStorage fallback) on mount
   useEffect(() => {
@@ -375,7 +423,9 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     saveConfig()
   }, [config])
 
-  const enrolledPlayers = players.filter(player => player.active)
+  const visiblePlayers = players.filter(player => player.archived !== true)
+  const draftVisiblePlayers = draftPlayers.filter(player => player.archived !== true)
+  const enrolledPlayers = visiblePlayers.filter(player => player.active)
   const derivedBucketCount = Math.max(2, enrolledPlayers.length)
 
   useEffect(() => {
@@ -387,30 +437,166 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     setBoardKey(k => k + 1)
   }, [config.bucketCount, derivedBucketCount, started])
 
-  const updatePlayer = (id: string, updater: (player: PlayerProfile) => PlayerProfile) => {
-    setPlayers(prev => prev.map(player => (player.id === id ? updater(player) : player)))
+  const syncDraftWithPlayers = useCallback(
+    (draft: PlayerProfile[], nextPlayers: PlayerProfile[]) => {
+      const draftMap = new Map(draft.map(player => [player.id, player]))
+      const synced = nextPlayers.map(player => {
+        const draftPlayer = draftMap.get(player.id)
+        if (draftPlayer == null) return player
+        return {
+          ...player,
+          name: draftPlayer.name,
+          avatarUrl: draftPlayer.avatarUrl,
+          archived: draftPlayer.archived
+        }
+      })
+      draft.forEach(player => {
+        if (!nextPlayers.some(existing => existing.id === player.id)) {
+          synced.push(player)
+        }
+      })
+      return synced
+    },
+    []
+  )
+
+  const updatePlayersImmediate = useCallback(
+    (updater: (players: PlayerProfile[]) => PlayerProfile[]) => {
+      setPlayers(prev => {
+        const nextPlayers = updater(prev)
+        if (showPlayerSettings) {
+          setDraftPlayers(draft => syncDraftWithPlayers(draft, nextPlayers))
+        }
+        void persistPlayers(nextPlayers)
+        return nextPlayers
+      })
+    },
+    [persistPlayers, showPlayerSettings, syncDraftWithPlayers]
+  )
+
+  const updateDraftPlayers = useCallback(
+    (updater: (players: PlayerProfile[]) => PlayerProfile[]) => {
+      setDraftPlayers(prev => updater(prev))
+      setPlayersDirty(true)
+    },
+    []
+  )
+
+  const restoreArchivedPlayerByName = (name: string, currentId: string) => {
+    const normalized = name.trim().toLowerCase()
+    if (normalized.length === 0) {
+      updateDraftPlayers(prev =>
+        prev.map(player =>
+          player.id === currentId ? { ...player, name } : player
+        )
+      )
+      return
+    }
+
+    updateDraftPlayers(prev => {
+      const archivedMatch = prev.find(
+        player =>
+          player.archived === true &&
+          player.name.trim().toLowerCase() === normalized &&
+          player.id !== currentId
+      )
+      if (archivedMatch == null) {
+        return prev.map(player =>
+          player.id === currentId ? { ...player, name } : player
+        )
+      }
+
+      const currentPlayer = prev.find(player => player.id === currentId)
+      const currentAvatar = currentPlayer?.avatarUrl
+      const mergedAvatar =
+        currentAvatar != null && currentAvatar.trim() !== ""
+          ? currentAvatar
+          : archivedMatch.avatarUrl
+
+      return prev
+        .filter(player => player.id !== currentId)
+        .map(player =>
+          player.id === archivedMatch.id
+            ? {
+                ...player,
+                name,
+                archived: false,
+                active: true,
+                avatarUrl: mergedAvatar
+              }
+            : player
+        )
+    })
+  }
+
+  const updatePlayerImmediate = (id: string, updater: (player: PlayerProfile) => PlayerProfile) => {
+    updatePlayersImmediate(prev =>
+      prev.map(player => (player.id === id ? updater(player) : player))
+    )
+  }
+
+  const updateDraftPlayer = (id: string, updater: (player: PlayerProfile) => PlayerProfile) => {
+    updateDraftPlayers(prev =>
+      prev.map(player => (player.id === id ? updater(player) : player))
+    )
   }
 
   const addPlayer = () => {
-    setPlayers(prev => [
+    const nextIndex = visiblePlayers.length + 1
+    updateDraftPlayers(prev => [
       ...prev,
       {
         id: makePlayerId(),
-        name: `Player ${prev.length + 1}`,
+        name: `Player ${nextIndex}`,
         wins: 0,
-        active: true
+        active: true,
+        archived: false
       }
     ])
   }
 
-  const removePlayer = (id: string) => {
-    setPlayers(prev => {
-      if (prev.length <= 2) return prev
-      return prev.filter(player => player.id !== id)
+  const archivePlayer = (id: string) => {
+    updateDraftPlayers(prev => {
+      const activeVisibleCount = prev.filter(player => player.archived !== true).length
+      if (activeVisibleCount <= 2) return prev
+      return prev.map(player =>
+        player.id === id
+          ? { ...player, archived: true, active: false }
+          : player
+      )
     })
   }
 
-  const leaderboard = [...players].sort((a, b) => b.wins - a.wins)
+  const handleAvatarUpload = async (playerId: string, file: File) => {
+    setUploadingPlayerId(playerId)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      const response = await fetch("/api/plinko/avatar", {
+        method: "POST",
+        body: formData
+      })
+
+      if (!response.ok) {
+        throw new Error("Upload failed")
+      }
+
+      const data = await response.json()
+      if (typeof data.url === "string" && data.url.trim() !== "") {
+        updateDraftPlayer(playerId, current => ({
+          ...current,
+          avatarUrl: data.url
+        }))
+      }
+    } catch {
+      setSaveMessage({ type: "error", text: "Avatar upload failed. Try again." })
+      setTimeout(() => setSaveMessage(null), 4000)
+    } finally {
+      setUploadingPlayerId(null)
+    }
+  }
+
+  const leaderboard = [...visiblePlayers].sort((a, b) => b.wins - a.wins)
   const topWins = leaderboard.length > 0 ? leaderboard[0].wins : 0
   const hasWinner = topWins > 0
   const winnerCount = hasWinner
@@ -439,14 +625,14 @@ export function Plinko({ initialConfig }: PlinkoProps) {
       .map(bucket => assignments[bucket])
       .filter(id => id != null)
     if (winningPlayerIds.length === 0) return
-    setPlayers(prev =>
+    updatePlayersImmediate(prev =>
       prev.map(player =>
         winningPlayerIds.includes(player.id)
           ? { ...player, wins: player.wins + 1 }
           : player
       )
     )
-  }, [roundWinnerBuckets])
+  }, [roundWinnerBuckets, updatePlayersImmediate])
 
   // Helper to get placeholder avatar URL
   const getAvatarUrl = (player: PlayerProfile): string => {
@@ -763,13 +949,13 @@ export function Plinko({ initialConfig }: PlinkoProps) {
           </Button>
         </div>
         <div className="flex flex-wrap gap-2">
-          {players.map(player => (
+          {visiblePlayers.map(player => (
             <Button
               key={player.id}
               variant={player.active ? "default" : "outline"}
               size="sm"
               onClick={() =>
-                updatePlayer(player.id, current => ({ ...current, active: !current.active }))
+                updatePlayerImmediate(player.id, current => ({ ...current, active: !current.active }))
               }
             >
               {player.name}
@@ -793,7 +979,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
             style={{ width: config.width }}
           >
             {bucketAssignments.map((playerId, bucketIndex) => {
-              const player = players.find(p => p.id === playerId)
+              const player = visiblePlayers.find(p => p.id === playerId)
               if (player == null) return null
               const isWinner = roundWinnerBuckets?.includes(bucketIndex) ?? false
               return (
@@ -1290,9 +1476,20 @@ export function Plinko({ initialConfig }: PlinkoProps) {
                 Close
               </Button>
             </div>
-            <Button variant="outline" onClick={addPlayer}>Add player</Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" onClick={addPlayer}>Add player</Button>
+              <Button
+                onClick={handleSavePlayers}
+                disabled={!playersDirty || isSaving}
+              >
+                {isSaving ? "Saving..." : "Save"}
+              </Button>
+              {playersDirty && (
+                <span className="text-xs text-slate-500">Unsaved changes</span>
+              )}
+            </div>
             <div className="space-y-3">
-              {players.map(player => {
+              {draftVisiblePlayers.map(player => {
                 const assignedBucket = bucketByPlayer.get(player.id)
                 const isRoundWinner = roundWinnerBuckets?.includes(assignedBucket ?? -1) ?? false
                 return (
@@ -1311,23 +1508,9 @@ export function Plinko({ initialConfig }: PlinkoProps) {
                           className="min-w-[140px]"
                           value={player.name}
                           onChange={e =>
-                            updatePlayer(player.id, current => ({
-                              ...current,
-                              name: e.target.value
-                            }))
+                            restoreArchivedPlayerByName(e.target.value, player.id)
                           }
                         />
-                        <Button
-                          variant={player.active ? "default" : "outline"}
-                          onClick={() =>
-                            updatePlayer(player.id, current => ({
-                              ...current,
-                              active: !current.active
-                            }))
-                          }
-                        >
-                          {player.active ? "Enrolled" : "Benched"}
-                        </Button>
                         {player.active && assignedBucket != null && (
                           <span className="text-xs text-slate-500">
                             Bucket {assignedBucket + 1}
@@ -1338,15 +1521,37 @@ export function Plinko({ initialConfig }: PlinkoProps) {
                             Round winner
                           </span>
                         )}
-                        {/* TODO: implement image upload and storage */}
-                        <Button variant="outline" disabled>Upload image</Button>
+                        <input
+                          id={`avatar-upload-${player.id}`}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={event => {
+                            const file = event.target.files?.[0]
+                            if (file != null) {
+                              handleAvatarUpload(player.id, file)
+                            }
+                            event.target.value = ""
+                          }}
+                        />
+                        <Button
+                          asChild
+                          variant="outline"
+                          disabled={uploadingPlayerId === player.id}
+                        >
+                          <label htmlFor={`avatar-upload-${player.id}`}>
+                            {uploadingPlayerId === player.id ? "Uploading..." : "Upload image"}
+                          </label>
+                        </Button>
                       </div>
                       <div className="flex flex-wrap items-center gap-2 text-sm">
                         <span className="w-16">Wins</span>
                         <Button
                           variant="outline"
                           onClick={() =>
-                            updatePlayer(player.id, current => ({
+                            (players.some(existing => existing.id === player.id)
+                              ? updatePlayerImmediate
+                              : updateDraftPlayer)(player.id, current => ({
                               ...current,
                               wins: Math.max(0, current.wins - 1)
                             }))
@@ -1358,7 +1563,9 @@ export function Plinko({ initialConfig }: PlinkoProps) {
                         <Button
                           variant="outline"
                           onClick={() =>
-                            updatePlayer(player.id, current => ({
+                            (players.some(existing => existing.id === player.id)
+                              ? updatePlayerImmediate
+                              : updateDraftPlayer)(player.id, current => ({
                               ...current,
                               wins: current.wins + 1
                             }))
@@ -1368,9 +1575,9 @@ export function Plinko({ initialConfig }: PlinkoProps) {
                         </Button>
                         <Button
                           variant="outline"
-                          onClick={() => removePlayer(player.id)}
+                          onClick={() => archivePlayer(player.id)}
                         >
-                          Remove
+                          Archive
                         </Button>
                       </div>
                     </div>

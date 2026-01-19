@@ -7,10 +7,17 @@ export interface PlayerProfile {
   wins: number
   active: boolean
   avatarUrl?: string
+  archived?: boolean
 }
 
+const normalizePlayers = (players: PlayerProfile[]): PlayerProfile[] =>
+  players.map(player => ({
+    ...player,
+    archived: player.archived ?? false
+  }))
+
 export async function GET() {
-  if (!isRedisAvailable() || !redis) {
+  if (!isRedisAvailable() || redis == null) {
     return NextResponse.json(
       { error: "Redis not configured", fallback: true },
       { status: 503 }
@@ -19,7 +26,8 @@ export async function GET() {
 
   try {
     const players = await redis.get<PlayerProfile[]>(REDIS_KEYS.PLAYERS)
-    return NextResponse.json({ players: players ?? null })
+    if (players == null) return NextResponse.json({ players: null })
+    return NextResponse.json({ players: normalizePlayers(players) })
   } catch (error) {
     console.error("Failed to fetch players from Redis:", error)
     return NextResponse.json(
@@ -30,7 +38,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  if (!isRedisAvailable() || !redis) {
+  if (!isRedisAvailable() || redis == null) {
     return NextResponse.json(
       { error: "Redis not configured", fallback: true },
       { status: 503 }
@@ -48,7 +56,7 @@ export async function POST(request: Request) {
       )
     }
 
-    await redis.set(REDIS_KEYS.PLAYERS, players)
+    await redis.set(REDIS_KEYS.PLAYERS, normalizePlayers(players))
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("Failed to save players to Redis:", error)
