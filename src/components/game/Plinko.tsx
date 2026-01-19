@@ -1209,48 +1209,46 @@ export function Plinko({ initialConfig }: PlinkoProps) {
             </div>
           </fieldset>
         </div>
-        )}
-      </div>
-
-      {/* Right: Leaderboard */}
-      <aside className="w-full md:w-64 shrink-0">
-        <section className="border rounded-md p-3 space-y-2">
-          <h2 className="text-sm font-semibold">Leaderboard</h2>
-          {roundWinnerBuckets != null && roundWinnerBuckets.length > 0 && (
-            <div className="text-xs text-slate-500">
-              Round winner: bucket {roundWinnerBuckets.map(bucket => bucket + 1).join(", ")}
-            </div>
-          )}
-          {hasWinner && (
-            <div className="text-xs text-slate-500">
-              {winnerCount > 1 ? "Co-winners" : "Winner"}: {topWins} wins
-            </div>
-          )}
-          <div className="space-y-2">
-            {leaderboard.map((player, index) => (
-              <div
-                key={player.id}
-                className="flex items-center justify-between text-sm border rounded-md px-3 py-2"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="w-5 text-slate-500">#{index + 1}</span>
-                  <span>{player.name}</span>
-                  {roundWinnerBuckets?.includes(bucketByPlayer.get(player.id) ?? -1) && (
-                    <span className="text-[10px] uppercase tracking-wide text-emerald-600">
-                      Round winner
-                    </span>
-                  )}
-                  {hasWinner && player.wins === topWins && (
-                    <span className="text-[10px] uppercase tracking-wide text-emerald-600">
-                      Winner
-                    </span>
-                  )}
-                </div>
-                <span className="font-semibold">{player.wins}</span>
+        ) : (
+          /* Leaderboard (shown when config is closed) */
+          <section className="border rounded-md p-3 space-y-2">
+            <h2 className="text-sm font-semibold">Leaderboard</h2>
+            {roundWinnerBuckets != null && roundWinnerBuckets.length > 0 && (
+              <div className="text-xs text-slate-500">
+                Round winner: bucket {roundWinnerBuckets.map(bucket => bucket + 1).join(", ")}
               </div>
-            ))}
-          </div>
-        </section>
+            )}
+            {hasWinner && (
+              <div className="text-xs text-slate-500">
+                {winnerCount > 1 ? "Co-winners" : "Winner"}: {topWins} wins
+              </div>
+            )}
+            <div className="space-y-2">
+              {leaderboard.map((player, index) => (
+                <div
+                  key={player.id}
+                  className="flex items-center justify-between text-sm border rounded-md px-3 py-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 text-slate-500">#{index + 1}</span>
+                    <span>{player.name}</span>
+                    {roundWinnerBuckets?.includes(bucketByPlayer.get(player.id) ?? -1) && (
+                      <span className="text-[10px] uppercase tracking-wide text-emerald-600">
+                        Round winner
+                      </span>
+                    )}
+                    {hasWinner && player.wins === topWins && (
+                      <span className="text-[10px] uppercase tracking-wide text-emerald-600">
+                        Winner
+                      </span>
+                    )}
+                  </div>
+                  <span className="font-semibold">{player.wins}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
       </aside>
 
       {/* Player Settings Modal */}
