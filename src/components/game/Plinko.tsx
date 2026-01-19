@@ -80,7 +80,7 @@ const defaultConfig: PlinkoConfig = {
   bucketDistribution: "even",
   winCondition: "most",
   winNth: 3,
-  width: 500,
+  width: 600,
   height: 450
 }
 
@@ -146,18 +146,36 @@ const makePlayerId = (): string =>
   `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
 
 const defaultPlayers: PlayerProfile[] = [
-  { id: makePlayerId(), name: "Jon", wins: 0, active: true },
-  { id: makePlayerId(), name: "Sam", wins: 0, active: true },
-  { id: makePlayerId(), name: "Matt", wins: 0, active: true },
-  { id: makePlayerId(), name: "William", wins: 0, active: true },
-  { id: makePlayerId(), name: "Paul", wins: 0, active: true },
-  { id: makePlayerId(), name: "Cache", wins: 0, active: true },
-  { id: makePlayerId(), name: "Jared", wins: 0, active: true },
-  { id: makePlayerId(), name: "Daniel", wins: 0, active: true },
-  { id: makePlayerId(), name: "Alberto", wins: 0, active: true },
-  { id: makePlayerId(), name: "Elizabeth", wins: 0, active: true },
-  { id: makePlayerId(), name: "Madison", wins: 0, active: true }
+  { id: makePlayerId(), name: "Alberto", wins: 0, active: true, avatarUrl: "https://ca.slack-edge.com/T08U86VNU-U07CS78N83E-75c562954cec-512" },
+  { id: makePlayerId(), name: "Cache", wins: 0, active: true, avatarUrl: "https://ca.slack-edge.com/T08U86VNU-UJTV9CALF-1f9a6157e910-512" },
+  { id: makePlayerId(), name: "Daniel", wins: 0, active: true, avatarUrl: "https://ca.slack-edge.com/T08U86VNU-U04UZ5RR5RU-6b08814bab5f-512" },
+  { id: makePlayerId(), name: "Elizabeth", wins: 0, active: true, avatarUrl: "https://ca.slack-edge.com/T08U86VNU-U08J7A4HL20-969440ad060f-512" },
+  { id: makePlayerId(), name: "Fari", wins: 0, active: true, avatarUrl: "https://ca.slack-edge.com/T08U86VNU-U04T9PY41P1-d15c814fd4e2-512" },
+  { id: makePlayerId(), name: "Jared", wins: 0, active: true, avatarUrl: "https://ca.slack-edge.com/T08U86VNU-U075CGCJP8V-3dce62562a1a-512" },
+  { id: makePlayerId(), name: "Jon", wins: 0, active: true, avatarUrl: "https://ca.slack-edge.com/T08U86VNU-U02E91B4U66-1b9a90423a90-512" },
+  { id: makePlayerId(), name: "Madison", wins: 0, active: true, avatarUrl: "https://ca.slack-edge.com/T08U86VNU-U026T9FAGQ7-90a4aaa8f62c-512" },
+  { id: makePlayerId(), name: "Matt", wins: 0, active: true, avatarUrl: "https://ca.slack-edge.com/T08U86VNU-U8U5ANCF8-3bfdde800605-512" },
+  { id: makePlayerId(), name: "Paul", wins: 0, active: true, avatarUrl: "https://ca.slack-edge.com/T08U86VNU-U08U8DPR9-03d672ef101c-512" },
+  { id: makePlayerId(), name: "RJ", wins: 0, active: true, avatarUrl: "https://ca.slack-edge.com/T08U86VNU-U0990R1S6-b47fdae676a6-192" },
+  { id: makePlayerId(), name: "Sam", wins: 0, active: true, avatarUrl: "https://ca.slack-edge.com/T08U86VNU-U01DXBN6A3S-8720534b422b-512" },
+  { id: makePlayerId(), name: "William", wins: 0, active: true, avatarUrl: "https://ca.slack-edge.com/T08U86VNU-U0ABCTX5H-g37aa34e7410-192" },
 ]
+
+const defaultAvatarByName = new Map(
+  defaultPlayers
+    .filter(player => player.avatarUrl != null && player.avatarUrl.trim() !== "")
+    .map(player => [player.name.toLowerCase(), player.avatarUrl as string])
+)
+
+const applyDefaultAvatars = (profiles: PlayerProfile[]): PlayerProfile[] =>
+  profiles.map(profile => {
+    if (profile.avatarUrl != null && profile.avatarUrl.trim() !== "") {
+      return profile
+    }
+    const defaultAvatar = defaultAvatarByName.get(profile.name.toLowerCase())
+    if (defaultAvatar == null) return profile
+    return { ...profile, avatarUrl: defaultAvatar }
+  })
 
 export function Plinko({ initialConfig }: PlinkoProps) {
   const canvasRef = useRef<HTMLDivElement>(null)
@@ -240,7 +258,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
       const apiPlayers = await loadPlayersFromAPI()
       if (apiPlayers != null && Array.isArray(apiPlayers)) {
         if (apiPlayers.length >= 2) {
-          setPlayers(apiPlayers)
+          setPlayers(applyDefaultAvatars(apiPlayers))
           return
         } else {
           const needed = 2 - apiPlayers.length
@@ -253,7 +271,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
               active: true
             })
           }
-          setPlayers(padded)
+          setPlayers(applyDefaultAvatars(padded))
           return
         }
       }
@@ -265,7 +283,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
           const parsed = JSON.parse(stored) as PlayerProfile[]
           if (Array.isArray(parsed)) {
             if (parsed.length >= 2) {
-              setPlayers(parsed)
+              setPlayers(applyDefaultAvatars(parsed))
             } else {
               const needed = 2 - parsed.length
               const padded = [...parsed]
@@ -277,7 +295,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
                   active: true
                 })
               }
-              setPlayers(padded)
+              setPlayers(applyDefaultAvatars(padded))
             }
           }
         }
@@ -428,7 +446,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     if (player.avatarUrl != null && player.avatarUrl.trim() !== "") return player.avatarUrl
     // Use DiceBear API for placeholder avatars
     const seed = encodeURIComponent(player.name || player.id)
-    return `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${seed}&size=48`
+    return `https://api.dicebear.com/7.x/bottts-neutral/png?seed=${seed}&size=48`
   }
 
   const makeShape = (
@@ -781,6 +799,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
                     alt={`${player.name} avatar`}
                     width={40}
                     height={40}
+                    unoptimized
                     className={`h-10 w-10 rounded-full object-cover border-2 ${
                       isWinner ? "border-emerald-500 ring-2 ring-emerald-300" : "border-slate-200"
                     }`}
@@ -1276,6 +1295,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
                       alt={`${player.name} avatar`}
                       width={48}
                       height={48}
+                      unoptimized
                       className="h-12 w-12 rounded-full object-cover"
                     />
                     <div className="flex-1 space-y-2">
