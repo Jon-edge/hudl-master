@@ -4,30 +4,30 @@ overview: A comprehensive UI/UX overhaul replacing the debug renderer with a cus
 todos:
   - id: scaffold
     content: Create PlinkoGame component folder structure and move existing logic
-    status: in_progress
+    status: completed
   - id: custom-renderer
     content: Implement Custom Canvas Renderer (replacing Matter.Render)
-    status: pending
+    status: completed
     dependencies:
       - scaffold
   - id: particles
     content: Implement Particle System & Visual Effects
-    status: pending
+    status: completed
     dependencies:
       - custom-renderer
   - id: sound
     content: Add Sound Effects System
-    status: pending
+    status: completed
     dependencies:
       - scaffold
   - id: layout
     content: Refactor Layout for Mobile Responsiveness
-    status: pending
+    status: completed
     dependencies:
       - custom-renderer
   - id: player-mgmt
     content: Enhance Player Management UI
-    status: pending
+    status: completed
     dependencies:
       - layout
 ---
