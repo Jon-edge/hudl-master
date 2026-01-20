@@ -32,7 +32,7 @@ export function PlinkoGame({
   players,
   isRunning,
   onGameEnd,
-  onBallSettle,
+  onBallSettle: onBallSettleProp,
   winningBuckets = [],
   className,
   soundEnabled = true,
@@ -43,39 +43,41 @@ export function PlinkoGame({
   
   // Game state refs
   const droppedRef = useRef(0)
+  const settledCountRef = useRef(0)
   const bucketCountsRef = useRef<number[]>([])
   const firstBallBucketRef = useRef<number | null>(null)
   const gameEndedRef = useRef(false)
   const zigRef = useRef({ x: config.width / 2, dir: 1 })
   const liveCountsPrevRef = useRef<number[]>([])
-  const onGameEndRef = useRef(onGameEnd)
-  const onBallSettleRef = useRef(onBallSettle)
-
-  // Keep refs updated
-  useEffect(() => {
-    onGameEndRef.current = onGameEnd
-    onBallSettleRef.current = onBallSettle
-  }, [onGameEnd, onBallSettle])
 
   // Sound effects
   const { playCollision, playBucket, playWin } = useGameSounds({
     enabled: soundEnabled,
   })
 
-  // Check win condition - defined early to avoid reference issues
+  // Store callbacks in refs to avoid stale closures
+  const onGameEndRef = useRef(onGameEnd)
+  const playWinRef = useRef(playWin)
+  useEffect(() => {
+    onGameEndRef.current = onGameEnd
+    playWinRef.current = playWin
+  }, [onGameEnd, playWin])
+
+  // Check win condition
   const checkWinCondition = useCallback(() => {
     if (gameEndedRef.current) return
     
     const counts = bucketCountsRef.current
-    const totalBalls = counts.reduce((a, b) => a + b, 0)
+    const totalSettled = settledCountRef.current
+    const totalDropped = droppedRef.current
     const expectedBalls = config.ballCount
     
-    // For "nth" condition, check during play
+    // For "nth" condition, check during play (first bucket to reach N balls wins)
     if (config.winCondition === "nth") {
       for (let i = 0; i < counts.length; i++) {
         if (counts[i] >= config.winNth && (liveCountsPrevRef.current[i] || 0) < config.winNth) {
           gameEndedRef.current = true
-          playWin()
+          playWinRef.current()
           onGameEndRef.current?.([i])
           return
         }
@@ -84,8 +86,11 @@ export function PlinkoGame({
       return
     }
     
-    // For other conditions, wait until all balls have settled
-    if (totalBalls < expectedBalls) return
+    // For other conditions, wait until all balls have been dropped AND settled
+    // Skip if ballCount is 0 (unlimited mode)
+    if (expectedBalls === 0) return
+    if (totalDropped < expectedBalls) return
+    if (totalSettled < expectedBalls) return
     
     let winnerBuckets: number[] = []
     
@@ -102,7 +107,7 @@ export function PlinkoGame({
         if (emptyBuckets.length > 0) {
           winnerBuckets = emptyBuckets
         } else {
-          const minCount = Math.min(...counts)
+          const minCount = Math.min(...counts.filter(c => c > 0))
           winnerBuckets = counts
             .map((count, idx) => count === minCount ? idx : -1)
             .filter(idx => idx >= 0)
@@ -112,21 +117,23 @@ export function PlinkoGame({
       case "most":
       default: {
         const maxCount = Math.max(...counts)
-        winnerBuckets = counts
-          .map((count, idx) => count === maxCount ? idx : -1)
-          .filter(idx => idx >= 0)
+        if (maxCount > 0) {
+          winnerBuckets = counts
+            .map((count, idx) => count === maxCount ? idx : -1)
+            .filter(idx => idx >= 0)
+        }
         break
       }
     }
     
     if (winnerBuckets.length > 0) {
       gameEndedRef.current = true
-      playWin()
+      playWinRef.current()
       onGameEndRef.current?.(winnerBuckets)
     }
-  }, [config.ballCount, config.winCondition, config.winNth, playWin])
+  }, [config.ballCount, config.winCondition, config.winNth])
 
-  // Refs for physics callbacks
+  // Store checkWinCondition in ref for use in callbacks
   const checkWinConditionRef = useRef(checkWinCondition)
   useEffect(() => {
     checkWinConditionRef.current = checkWinCondition
@@ -147,18 +154,31 @@ export function PlinkoGame({
 
   // Physics ball settle handler
   const handleBallSettle = useCallback((bucketIndex: number) => {
+    // Increment counters
     bucketCountsRef.current[bucketIndex] = (bucketCountsRef.current[bucketIndex] || 0) + 1
+    settledCountRef.current += 1
     
+    // Track first ball for "first" win condition
     if (firstBallBucketRef.current === null) {
       firstBallBucketRef.current = bucketIndex
     }
     
+    // Play bucket sound
     playBucket()
-    onBallSettleRef.current?.(bucketIndex)
+    
+    // Add particle effect at bucket
+    const bounds = bucketBoundsRef.current
+    if (bounds && bounds.length > bucketIndex + 1) {
+      const bucketX = (bounds[bucketIndex] + bounds[bucketIndex + 1]) / 2
+      particleEmitterRef.current.addBurst(bucketX, config.height - 30, 8, particlePresets.bucket)
+    }
+    
+    // Notify parent
+    onBallSettleProp?.(bucketIndex)
     
     // Check win conditions
     checkWinConditionRef.current()
-  }, [playBucket])
+  }, [playBucket, onBallSettleProp, config.height])
 
   // Initialize physics
   const {
@@ -176,31 +196,9 @@ export function PlinkoGame({
     onCollision: handleCollision,
   })
 
-  // Particle effect for bucket landing
-  useEffect(() => {
-    const emitter = particleEmitterRef.current
-    const handleBucketParticle = (bucketIndex: number) => {
-      const bounds = bucketBoundsRef.current
-      if (bounds.length > bucketIndex + 1) {
-        const bucketX = (bounds[bucketIndex] + bounds[bucketIndex + 1]) / 2
-        emitter.addBurst(bucketX, config.height - 30, 8, particlePresets.bucket)
-      }
-    }
-    
-    // Store original onBallSettle to chain calls
-    const originalSettle = onBallSettleRef.current
-    onBallSettleRef.current = (bucketIndex: number) => {
-      originalSettle?.(bucketIndex)
-      handleBucketParticle(bucketIndex)
-    }
-    
-    return () => {
-      onBallSettleRef.current = originalSettle
-    }
-  }, [config.height, bucketBoundsRef])
 
-  // Custom renderer with integrated particles
-  const { startRender, stopRender, registerPinHit } = usePlinkoRender({
+  // Custom renderer
+  const { startRender, stopRender } = usePlinkoRender({
     canvasRef,
     engineRef,
     ballsRef,
@@ -216,6 +214,7 @@ export function PlinkoGame({
     if (!isRunning) return
     
     const interval = setInterval(() => {
+      // Stop dropping if we've reached the ball count (0 = unlimited)
       if (config.ballCount > 0 && droppedRef.current >= config.ballCount) {
         clearInterval(interval)
         return
@@ -242,12 +241,9 @@ export function PlinkoGame({
 
   // Initialize board and start rendering
   useEffect(() => {
-    initializeBoard()
-    startRender()
-    startRunner()
-    
-    // Reset state
+    // Reset all game state FIRST
     droppedRef.current = 0
+    settledCountRef.current = 0
     bucketCountsRef.current = new Array(config.bucketCount).fill(0)
     firstBallBucketRef.current = null
     gameEndedRef.current = false
@@ -255,13 +251,18 @@ export function PlinkoGame({
     zigRef.current = { x: config.width / 2, dir: 1 }
     particleEmitterRef.current.clear()
     
+    // THEN initialize the board and start
+    initializeBoard()
+    startRender()
+    startRunner()
+    
     return () => {
       stopRender()
       cleanup()
     }
-  }, [boardKey, initializeBoard, startRender, startRunner, stopRender, cleanup, config.bucketCount, config.width])
+  }, [boardKey, config.bucketCount, config.width, initializeBoard, startRender, startRunner, stopRender, cleanup])
 
-  // Particle render loop (separate from physics render for layering)
+  // Particle render loop (draws on top of main render)
   useEffect(() => {
     let animFrame: number
     
@@ -272,7 +273,6 @@ export function PlinkoGame({
       if (canvas) {
         const ctx = canvas.getContext("2d")
         if (ctx) {
-          // Draw particles on top of everything
           particleEmitterRef.current.draw(ctx)
         }
       }
@@ -297,19 +297,6 @@ export function PlinkoGame({
     config.rimHeight,
   ])
 
-  // Register pin hits for visual feedback
-  useEffect(() => {
-    // This connects physics collision events to visual pin hit registration
-    const handlePinHitVisual = (velocity: number, position: { x: number; y: number }) => {
-      registerPinHit(position.x, position.y, velocity)
-    }
-    
-    // Store reference for cleanup
-    const originalHandler = handleCollision
-    return () => {
-      // Cleanup if needed
-    }
-  }, [handleCollision, registerPinHit])
 
   return (
     <div className={cn("flex flex-col gap-3", className)}>

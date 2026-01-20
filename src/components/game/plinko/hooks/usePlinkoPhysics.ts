@@ -1,13 +1,12 @@
 "use client"
 
-import { useRef, useCallback, useEffect } from "react"
+import { useRef, useCallback } from "react"
 import Matter, {
   Engine,
   Runner,
   Bodies,
   Composite,
   Events,
-  Body
 } from "matter-js"
 import type { PlinkoConfig } from "../types"
 
@@ -94,8 +93,21 @@ export function usePlinkoPhysics({
   const bucketBoundsRef = useRef<number[]>([])
   const settledBallsRef = useRef<Set<number>>(new Set())
   const ballIdCounterRef = useRef(0)
+  
+  // Store callbacks and config in refs to avoid stale closures
+  const onBallSettleRef = useRef(onBallSettle)
+  const onCollisionRef = useRef(onCollision)
+  const configRef = useRef(config)
+  onBallSettleRef.current = onBallSettle
+  onCollisionRef.current = onCollision
+  configRef.current = config
 
   const initializeBoard = useCallback(() => {
+    // Clean up previous engine if any
+    if (engineRef.current) {
+      Engine.clear(engineRef.current)
+    }
+    
     // Create fresh engine
     const engine = Engine.create()
     engine.positionIterations = 8
@@ -164,23 +176,60 @@ export function usePlinkoPhysics({
       ])
     }
 
-    // Collision detection for sounds
-    if (onCollision) {
-      Events.on(engine, "collisionStart", (event) => {
-        event.pairs.forEach((pair) => {
-          const isBallPin = 
-            (pair.bodyA.label?.startsWith("ball") && pair.bodyB.label?.startsWith("pin")) ||
-            (pair.bodyB.label?.startsWith("ball") && pair.bodyA.label?.startsWith("pin"))
-          
-          if (isBallPin) {
-            const ball = pair.bodyA.label?.startsWith("ball") ? pair.bodyA : pair.bodyB
-            const velocity = Math.sqrt(ball.velocity.x ** 2 + ball.velocity.y ** 2)
-            onCollision(velocity, { x: ball.position.x, y: ball.position.y })
-          }
-        })
+    // Set up collision detection for sounds
+    Events.on(engine, "collisionStart", (event) => {
+      event.pairs.forEach((pair) => {
+        const isBallPin = 
+          (pair.bodyA.label?.startsWith("ball") && pair.bodyB.label?.startsWith("pin")) ||
+          (pair.bodyB.label?.startsWith("ball") && pair.bodyA.label?.startsWith("pin"))
+        
+        if (isBallPin && onCollisionRef.current) {
+          const ball = pair.bodyA.label?.startsWith("ball") ? pair.bodyA : pair.bodyB
+          const velocity = Math.sqrt(ball.velocity.x ** 2 + ball.velocity.y ** 2)
+          onCollisionRef.current(velocity, { x: ball.position.x, y: ball.position.y })
+        }
       })
-    }
-  }, [config, onCollision])
+    })
+
+    // Set up ball settle detection - this is the key fix!
+    Events.on(engine, "afterUpdate", () => {
+      const currentBounds = bucketBoundsRef.current
+      const currentConfig = configRef.current
+      const settleZone = currentConfig.height - 60
+      
+      ballsRef.current.forEach((ball) => {
+        if (settledBallsRef.current.has(ball.id)) return
+        
+        // Check if ball has settled (low velocity and in bucket zone)
+        // Using both vertical and horizontal velocity for more reliable detection
+        const speed = Math.sqrt(ball.velocity.x ** 2 + ball.velocity.y ** 2)
+        if (ball.position.y > settleZone && speed < 2) {
+          let bucketIndex = -1
+          for (let i = 0; i < currentBounds.length - 1; i++) {
+            if (ball.position.x >= currentBounds[i] && ball.position.x < currentBounds[i + 1]) {
+              bucketIndex = i
+              break
+            }
+          }
+          
+          if (bucketIndex >= 0) {
+            settledBallsRef.current.add(ball.id)
+            
+            // Call the settle callback
+            if (onBallSettleRef.current) {
+              onBallSettleRef.current(bucketIndex)
+            }
+            
+            // Optionally destroy the ball
+            if (currentConfig.destroyBalls) {
+              Composite.remove(engine.world, ball)
+              ballsRef.current = ballsRef.current.filter(b => b.id !== ball.id)
+            }
+          }
+        }
+      })
+    })
+  }, [config])
 
   const dropBall = useCallback((x?: number): Matter.Body | null => {
     const engine = engineRef.current
@@ -232,6 +281,8 @@ export function usePlinkoPhysics({
   const cleanup = useCallback(() => {
     stopRunner()
     if (engineRef.current) {
+      Events.off(engineRef.current, "afterUpdate")
+      Events.off(engineRef.current, "collisionStart")
       Engine.clear(engineRef.current)
       engineRef.current = null
     }
@@ -239,47 +290,8 @@ export function usePlinkoPhysics({
     ballsRef.current = []
     pinsRef.current = []
     bucketBoundsRef.current = []
+    settledBallsRef.current = new Set()
   }, [stopRunner])
-
-  // Check for settled balls
-  useEffect(() => {
-    const engine = engineRef.current
-    if (!engine || !onBallSettle) return
-
-    const checkSettled = () => {
-      const { height } = config
-      const bounds = bucketBoundsRef.current
-
-      ballsRef.current.forEach((ball) => {
-        if (settledBallsRef.current.has(ball.id)) return
-        
-        if (ball.position.y > height - 60 && Math.abs(ball.velocity.y) < 1) {
-          let bucketIndex = -1
-          for (let i = 0; i < bounds.length - 1; i++) {
-            if (ball.position.x >= bounds[i] && ball.position.x < bounds[i + 1]) {
-              bucketIndex = i
-              break
-            }
-          }
-          
-          if (bucketIndex >= 0) {
-            settledBallsRef.current.add(ball.id)
-            onBallSettle(bucketIndex)
-            
-            if (config.destroyBalls) {
-              Composite.remove(engine.world, ball)
-              ballsRef.current = ballsRef.current.filter(b => b.id !== ball.id)
-            }
-          }
-        }
-      })
-    }
-
-    Events.on(engine, "afterUpdate", checkSettled)
-    return () => {
-      Events.off(engine, "afterUpdate", checkSettled)
-    }
-  }, [config, onBallSettle])
 
   return {
     engineRef,
