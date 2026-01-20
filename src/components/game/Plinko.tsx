@@ -735,6 +735,9 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     if (canvasRef.current == null) return
 
     const engine = Engine.create()
+    engine.positionIterations = 8
+    engine.velocityIterations = 6
+    engine.constraintIterations = 2
     const runner = Runner.create()
     engineRef.current = engine
     runnerRef.current = runner
@@ -756,6 +759,13 @@ export function Plinko({ initialConfig }: PlinkoProps) {
         config.wallThickness,
         { isStatic: true }
       ), // floor - positioned at bottom of canvas
+      Bodies.rectangle(
+        width / 2,
+        height + config.wallThickness / 2,
+        width,
+        config.wallThickness,
+        { isStatic: true }
+      ), // safety floor to prevent tunneling
       Bodies.rectangle(-25, height / 2, 50, height, { isStatic: true }), // left
       Bodies.rectangle(width + 25, height / 2, 50, height, { isStatic: true }) // right
     ]
@@ -825,17 +835,17 @@ export function Plinko({ initialConfig }: PlinkoProps) {
 
     const { width, height } = config
     const bounds = bucketBoundsRef.current
-    let balls: Matter.Body[] = []
-    let bucketCounts = new Array(config.bucketCount).fill(0)
+    const balls: Matter.Body[] = []
+    const bucketCounts = new Array(config.bucketCount).fill(0)
     let dropped = 0
     let finished = 0
     let gameEnded = false
-    let settledBalls = new Set<Matter.Body>()
+    const settledBalls = new Set<Matter.Body>()
     let firstBallBucket: number | null = null
-    let nthBallBucket: number | null = null
     let tiebreakRound = 0
     const ballsPerRound = config.ballCount
     const zig = { x: Math.random() * width, dir: 1 }
+    let liveCountsPrev = new Array(config.bucketCount).fill(0)
 
     let dropInterval: ReturnType<typeof setInterval> | null = null
 
@@ -874,6 +884,38 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     const afterUpdate = () => {
       if (gameEnded) return
 
+      if (config.winCondition === "nth") {
+        const liveCounts = new Array(config.bucketCount).fill(0)
+        balls.forEach(ball => {
+          if (ball.position.y < height - config.rimHeight) return
+          let bucket = -1
+          for (let i = 0; i < bounds.length - 1; i++) {
+            if (ball.position.x >= bounds[i] && ball.position.x < bounds[i + 1]) {
+              bucket = i
+              break
+            }
+          }
+          if (bucket >= 0 && bucket < liveCounts.length) {
+            liveCounts[bucket] += 1
+          }
+        })
+
+        const winnerBucket = liveCounts.findIndex(
+          (count, idx) => liveCountsPrev[idx] < config.winNth && count >= config.winNth
+        )
+        liveCountsPrev = liveCounts
+
+        if (winnerBucket >= 0) {
+          roundWinnerRef.current = [winnerBucket]
+          setRoundWinnerBuckets([winnerBucket])
+          gameEnded = true
+          stopGame("auto")
+          if (dropInterval != null) clearInterval(dropInterval)
+        }
+
+        return
+      }
+
       // Check each ball for settling
       balls.forEach((ball, index) => {
         if (settledBalls.has(ball)) return
@@ -896,9 +938,6 @@ export function Plinko({ initialConfig }: PlinkoProps) {
               if (finished === 1) {
                 firstBallBucket = bucket
               }
-              if (finished === config.winNth) {
-                nthBallBucket = bucket
-              }
             }
 
             if (config.destroyBalls) {
@@ -920,13 +959,6 @@ export function Plinko({ initialConfig }: PlinkoProps) {
         switch (config.winCondition) {
           case "first":
             if (firstBallBucket !== null) {
-              winnerBuckets = [firstBallBucket]
-            }
-            break
-          case "nth":
-            if (nthBallBucket !== null) {
-              winnerBuckets = [nthBallBucket]
-            } else if (firstBallBucket !== null) {
               winnerBuckets = [firstBallBucket]
             }
             break
@@ -958,14 +990,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
 
         // Check for tie - if multiple winners, start tiebreaker
         if (winnerBuckets.length > 1) {
-          // Clear all balls from the world
-          balls.forEach(ball => {
-            Composite.remove(engine.world, ball)
-          })
-          balls = []
-          settledBalls = new Set()
-          // Reset bucket counts for tiebreaker
-          bucketCounts = new Array(config.bucketCount).fill(0)
+          // Keep existing balls and counts; only add more for tiebreaker
           tiebreakRound += 1
           // Start dropping more balls
           startDropping()
