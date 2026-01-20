@@ -3,6 +3,7 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Modern Glass & Light Theme for Plinko */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -41,75 +42,137 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  
+  /* Game-specific colors */
+  --color-game-surface: var(--game-surface);
+  --color-game-surface-elevated: var(--game-surface-elevated);
+  --color-game-accent: var(--game-accent);
+  --color-game-accent-glow: var(--game-accent-glow);
+  --color-game-success: var(--game-success);
+  --color-game-success-glow: var(--game-success-glow);
+  --color-game-pin: var(--game-pin);
+  --color-game-ball: var(--game-ball);
+  --color-game-ball-trail: var(--game-ball-trail);
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --radius: 0.75rem;
+  
+  /* Modern Glass Light Theme */
+  --background: oklch(0.98 0.005 250);
+  --foreground: oklch(0.2 0.02 260);
+  --card: oklch(1 0 0 / 80%);
+  --card-foreground: oklch(0.2 0.02 260);
+  --popover: oklch(1 0 0 / 95%);
+  --popover-foreground: oklch(0.2 0.02 260);
+  
+  /* Primary: Deep Indigo */
+  --primary: oklch(0.45 0.18 270);
+  --primary-foreground: oklch(0.98 0.005 270);
+  
+  /* Secondary: Soft Slate */
+  --secondary: oklch(0.94 0.01 260);
+  --secondary-foreground: oklch(0.3 0.02 260);
+  
+  /* Muted: Whisper Gray */
+  --muted: oklch(0.96 0.005 260);
+  --muted-foreground: oklch(0.5 0.02 260);
+  
+  /* Accent: Electric Cyan */
+  --accent: oklch(0.75 0.15 200);
+  --accent-foreground: oklch(0.2 0.05 200);
+  
+  --destructive: oklch(0.6 0.22 25);
+  --border: oklch(0.9 0.01 260);
+  --input: oklch(0.92 0.01 260);
+  --ring: oklch(0.55 0.18 270);
+  
+  /* Charts: Vibrant palette */
+  --chart-1: oklch(0.65 0.2 270);
+  --chart-2: oklch(0.7 0.18 180);
+  --chart-3: oklch(0.75 0.15 140);
+  --chart-4: oklch(0.8 0.18 80);
+  --chart-5: oklch(0.7 0.2 340);
+  
+  /* Sidebar: Glass effect */
+  --sidebar: oklch(0.99 0.005 250 / 85%);
+  --sidebar-foreground: oklch(0.2 0.02 260);
+  --sidebar-primary: oklch(0.45 0.18 270);
+  --sidebar-primary-foreground: oklch(0.98 0.005 270);
+  --sidebar-accent: oklch(0.75 0.15 200);
+  --sidebar-accent-foreground: oklch(0.2 0.05 200);
+  --sidebar-border: oklch(0.92 0.01 260);
+  --sidebar-ring: oklch(0.55 0.18 270);
+  
+  /* Game-specific: Light Mode */
+  --game-surface: oklch(0.97 0.01 250);
+  --game-surface-elevated: oklch(1 0 0 / 90%);
+  --game-accent: oklch(0.65 0.22 270);
+  --game-accent-glow: oklch(0.65 0.22 270 / 40%);
+  --game-success: oklch(0.7 0.18 145);
+  --game-success-glow: oklch(0.7 0.18 145 / 40%);
+  --game-pin: oklch(0.55 0.12 260);
+  --game-ball: oklch(0.7 0.2 30);
+  --game-ball-trail: oklch(0.7 0.2 30 / 30%);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  /* Modern Glass Dark Theme */
+  --background: oklch(0.14 0.02 260);
+  --foreground: oklch(0.95 0.005 260);
+  --card: oklch(0.18 0.02 260 / 85%);
+  --card-foreground: oklch(0.95 0.005 260);
+  --popover: oklch(0.2 0.02 260 / 95%);
+  --popover-foreground: oklch(0.95 0.005 260);
+  
+  /* Primary: Bright Indigo */
+  --primary: oklch(0.7 0.18 270);
+  --primary-foreground: oklch(0.15 0.02 270);
+  
+  /* Secondary: Deep Slate */
+  --secondary: oklch(0.25 0.02 260);
+  --secondary-foreground: oklch(0.9 0.01 260);
+  
+  /* Muted: Charcoal */
+  --muted: oklch(0.22 0.015 260);
+  --muted-foreground: oklch(0.65 0.02 260);
+  
+  /* Accent: Neon Cyan */
+  --accent: oklch(0.8 0.18 195);
+  --accent-foreground: oklch(0.15 0.05 195);
+  
+  --destructive: oklch(0.65 0.2 20);
+  --border: oklch(0.3 0.02 260 / 50%);
+  --input: oklch(0.25 0.02 260);
+  --ring: oklch(0.7 0.18 270);
+  
+  /* Charts: Vibrant dark palette */
+  --chart-1: oklch(0.7 0.22 270);
+  --chart-2: oklch(0.75 0.2 175);
+  --chart-3: oklch(0.8 0.18 135);
+  --chart-4: oklch(0.82 0.2 70);
+  --chart-5: oklch(0.75 0.22 335);
+  
+  /* Sidebar: Dark glass */
+  --sidebar: oklch(0.16 0.02 260 / 90%);
+  --sidebar-foreground: oklch(0.95 0.005 260);
+  --sidebar-primary: oklch(0.7 0.18 270);
+  --sidebar-primary-foreground: oklch(0.15 0.02 270);
+  --sidebar-accent: oklch(0.8 0.18 195);
+  --sidebar-accent-foreground: oklch(0.15 0.05 195);
+  --sidebar-border: oklch(0.35 0.02 260 / 50%);
+  --sidebar-ring: oklch(0.7 0.18 270);
+  
+  /* Game-specific: Dark Mode */
+  --game-surface: oklch(0.16 0.02 260);
+  --game-surface-elevated: oklch(0.22 0.02 260 / 90%);
+  --game-accent: oklch(0.75 0.22 270);
+  --game-accent-glow: oklch(0.75 0.22 270 / 50%);
+  --game-success: oklch(0.75 0.2 145);
+  --game-success-glow: oklch(0.75 0.2 145 / 50%);
+  --game-pin: oklch(0.6 0.1 260);
+  --game-ball: oklch(0.8 0.22 35);
+  --game-ball-trail: oklch(0.8 0.22 35 / 35%);
 }
 
 @layer base {
@@ -118,5 +181,124 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* Glass Panel Effects */
+@layer utilities {
+  .glass-panel {
+    @apply bg-card backdrop-blur-xl border border-border/50 shadow-lg shadow-black/5;
+  }
+  
+  .glass-panel-elevated {
+    @apply bg-game-surface-elevated backdrop-blur-2xl border border-border/30 shadow-xl shadow-black/10;
+  }
+  
+  .glass-inset {
+    @apply bg-muted/50 backdrop-blur-sm border border-border/30 shadow-inner;
+  }
+  
+  .glow-accent {
+    box-shadow: 0 0 20px var(--game-accent-glow), 0 0 40px var(--game-accent-glow);
+  }
+  
+  .glow-success {
+    box-shadow: 0 0 20px var(--game-success-glow), 0 0 40px var(--game-success-glow);
+  }
+  
+  .text-glow-accent {
+    text-shadow: 0 0 10px var(--game-accent-glow);
+  }
+  
+  .text-glow-success {
+    text-shadow: 0 0 10px var(--game-success-glow);
+  }
+}
+
+/* Animation utilities for game elements */
+@layer utilities {
+  .animate-pulse-glow {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+  
+  .animate-bounce-subtle {
+    animation: bounce-subtle 0.6s ease-out;
+  }
+  
+  .animate-shake {
+    animation: shake 0.3s ease-in-out;
+  }
+  
+  .animate-float {
+    animation: float 3s ease-in-out infinite;
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 1;
+    filter: brightness(1);
+  }
+  50% {
+    opacity: 0.85;
+    filter: brightness(1.15);
+  }
+}
+
+@keyframes bounce-subtle {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  10%, 30%, 50%, 70%, 90% {
+    transform: translateX(-2px);
+  }
+  20%, 40%, 60%, 80% {
+    transform: translateX(2px);
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+/* Scrollbar styling for glass aesthetic */
+@layer utilities {
+  .scrollbar-glass {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  
+  .scrollbar-glass::-webkit-scrollbar {
+    width: 8px;
+  }
+  
+  .scrollbar-glass::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .scrollbar-glass::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+  }
+  
+  .scrollbar-glass::-webkit-scrollbar-thumb:hover {
+    background: var(--muted-foreground);
   }
 }
