@@ -139,14 +139,14 @@ const drawPins = (
 const drawBalls = (
   ctx: CanvasRenderingContext2D,
   balls: Matter.Body[],
-  trailsRef: React.MutableRefObject<Map<number, { x: number; y: number }[]>>,
+  trails: Map<number, { x: number; y: number }[]>,
   config: PlinkoConfig
 ) => {
   balls.forEach(ball => {
-    const trail = trailsRef.current.get(ball.id) ?? []
+    const trail = trails.get(ball.id) ?? []
     trail.push({ x: ball.position.x, y: ball.position.y })
     if (trail.length > 12) trail.shift()
-    trailsRef.current.set(ball.id, trail)
+    trails.set(ball.id, trail)
 
     if (trail.length > 1) {
       ctx.strokeStyle = "rgba(125,211,252,0.35)"
