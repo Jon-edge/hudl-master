@@ -4,4 +4,5 @@ export * from "./Loader"
 export * from "./Input"
 export * from "./RangeSlider"
 export * from "./Select"
+export * from "./Switch"
 
