@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react"
-import Matter, { Engine, Render, Runner, Bodies, Composite, Events } from "matter-js"
+import Matter, { Engine, Render, Runner, Bodies, Composite, Events, Vector } from "matter-js"
 import { PlinkoConfig } from "../types"
 import { PlayerProfile } from "../../shared/types"
 

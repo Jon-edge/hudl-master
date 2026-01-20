@@ -1,4 +1,5 @@
 import { PlayerProfile } from "./types"
+import { PlinkoConfig } from "../plinko/types"
 
 export const playerStorageKey = "plinko.players.v2"
 export const configStorageKey = "plinko.config.v1"
@@ -22,6 +23,33 @@ export async function savePlayersToAPI(players: PlayerProfile[]): Promise<boolea
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ players })
+    })
+    if (!response.ok) return false
+    const data = await response.json()
+    return data.fallback !== true && data.success === true
+  } catch {
+    return false
+  }
+}
+
+export async function loadConfigFromAPI(): Promise<Partial<PlinkoConfig> | null> {
+  try {
+    const response = await fetch("/api/plinko/config")
+    if (!response.ok) return null
+    const data = await response.json()
+    if (data.fallback === true) return null
+    return data.config
+  } catch {
+    return null
+  }
+}
+
+export async function saveConfigToAPI(config: PlinkoConfig): Promise<boolean> {
+  try {
+    const response = await fetch("/api/plinko/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config })
     })
     if (!response.ok) return false
     const data = await response.json()

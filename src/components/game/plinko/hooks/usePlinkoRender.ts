@@ -1,16 +1,16 @@
-import { useEffect, useRef } from "react"
+import React, { useEffect, useRef } from "react"
 import Matter, { Engine, Composite } from "matter-js"
 import { PlinkoConfig } from "../types"
 import { particleSystem } from "../utils/particles"
 
 interface UsePlinkoRenderProps {
   engine: Matter.Engine | null
-  canvasRef: React.RefObject<HTMLDivElement>
+  canvasRef: React.RefObject<HTMLDivElement | null>
   config: PlinkoConfig
 }
 
 export function usePlinkoRender({ engine, canvasRef, config }: UsePlinkoRenderProps) {
-  const requestRef = useRef<number>()
+  const requestRef = useRef<number>(0)
   const canvasElRef = useRef<HTMLCanvasElement | null>(null)
 
   useEffect(() => {
