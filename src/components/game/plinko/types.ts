@@ -15,6 +15,9 @@ export interface PlinkoConfig {
   ballShape: "ball" | "square" | "triangle"
   destroyBalls: boolean
   dropLocation: "random" | "zigzag" | "center"
+  dropAngleRandomness: number // Degrees of randomness for drop angle (0 = straight down)
+  dropVelocity: number // Initial velocity magnitude (0 = just gravity)
+  dropDelay: number // Milliseconds between ball drops
   pinRadius: number
   pinRows: number
   pinColumns: number
@@ -44,6 +47,9 @@ export const defaultConfig: PlinkoConfig = {
   ballShape: "ball",
   destroyBalls: false,
   dropLocation: "random",
+  dropAngleRandomness: 0,
+  dropVelocity: 0,
+  dropDelay: 500,
   pinRadius: 3,
   pinRows: 10,
   pinColumns: 8,

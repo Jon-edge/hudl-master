@@ -200,6 +200,63 @@ export function PlinkoConfigPanel({
             <option value="center">Center</option>
           </Select>
         </ConfigRow>
+        <ConfigRow label="Drop Delay (ms)">
+          <RangeSlider
+            className="flex-1"
+            value={config.dropDelay}
+            onValueChange={v => onConfigChange("dropDelay", v)}
+            min={50}
+            max={2000}
+            step={50}
+          />
+          <Input
+            className="w-20 h-8 text-xs"
+            type="number"
+            value={config.dropDelay}
+            onChange={e => onConfigChange("dropDelay", Number(e.target.value))}
+            min={50}
+            max={2000}
+            step={50}
+          />
+        </ConfigRow>
+        <ConfigRow label="Drop Velocity">
+          <RangeSlider
+            className="flex-1"
+            value={config.dropVelocity}
+            onValueChange={v => onConfigChange("dropVelocity", v)}
+            min={0}
+            max={20}
+            step={0.5}
+          />
+          <Input
+            className="w-16 h-8 text-xs"
+            type="number"
+            value={config.dropVelocity}
+            onChange={e => onConfigChange("dropVelocity", Number(e.target.value))}
+            min={0}
+            max={20}
+            step={0.5}
+          />
+        </ConfigRow>
+        <ConfigRow label="Angle Randomness (°)">
+          <RangeSlider
+            className="flex-1"
+            value={config.dropAngleRandomness}
+            onValueChange={v => onConfigChange("dropAngleRandomness", v)}
+            min={0}
+            max={90}
+            step={5}
+          />
+          <Input
+            className="w-16 h-8 text-xs"
+            type="number"
+            value={config.dropAngleRandomness}
+            onChange={e => onConfigChange("dropAngleRandomness", Number(e.target.value))}
+            min={0}
+            max={90}
+            step={5}
+          />
+        </ConfigRow>
       </CollapsibleSection>
 
       {/* Pins Section */}

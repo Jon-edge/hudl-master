@@ -276,10 +276,10 @@ export function PlinkoGame({
       
       dropBall(x)
       droppedRef.current++
-    }, 500)
+    }, config.dropDelay)
     
     return () => clearInterval(interval)
-  }, [isRunning, config.ballCount, config.width, config.dropLocation, config.ballRadius, config.pinColumns, dropBall])
+  }, [isRunning, config.ballCount, config.width, config.dropLocation, config.ballRadius, config.pinColumns, config.dropDelay, dropBall])
 
   // Initialize board and start rendering - only when boardKey changes (intentional reset)
   useEffect(() => {
@@ -291,7 +291,10 @@ export function PlinkoGame({
     gameEndedRef.current = false
     tiebreakerRoundRef.current = 0
     liveCountsPrevRef.current = new Array(config.bucketCount).fill(0)
-    zigRef.current = { x: config.width / 2, dir: 1 }
+    // Initialize zigzag at random position with random direction
+    const randomX = config.ballRadius + Math.random() * (config.width - config.ballRadius * 2)
+    const randomDir = Math.random() < 0.5 ? -1 : 1
+    zigRef.current = { x: randomX, dir: randomDir }
     particleEmitterRef.current.clear()
     
     // THEN initialize the board and start (using refs to avoid dependency issues)

@@ -5,6 +5,7 @@ import Matter, {
   Engine,
   Runner,
   Bodies,
+  Body,
   Composite,
   Events,
 } from "matter-js"
@@ -254,6 +255,22 @@ export function usePlinkoPhysics({
     
     ballsRef.current.push(ball)
     Composite.add(engine.world, ball)
+    
+    // Apply initial velocity if dropVelocity > 0
+    if (config.dropVelocity > 0) {
+      // Calculate angle: straight down (90 deg / PI/2 rad) plus random offset
+      const baseAngle = Math.PI / 2 // Straight down
+      const randomOffset = config.dropAngleRandomness > 0
+        ? ((Math.random() - 0.5) * 2) * (config.dropAngleRandomness * Math.PI / 180)
+        : 0
+      const angle = baseAngle + randomOffset
+      
+      // Convert to velocity vector
+      const vx = Math.cos(angle) * config.dropVelocity
+      const vy = Math.sin(angle) * config.dropVelocity
+      
+      Body.setVelocity(ball, { x: vx, y: vy })
+    }
     
     return ball
   }, [config])
