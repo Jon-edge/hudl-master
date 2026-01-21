@@ -44,17 +44,19 @@ export function PlayerSidebar({
   className,
   title = "Players",
 }: PlayerSidebarProps) {
-  // Store the sorted order of player IDs (only re-sort when players are added/removed)
-  const sortedIdsRef = React.useRef<string[]>([])
-  
-  // Get non-archived player IDs for comparison
+  // Get non-archived player IDs for comparison (used to detect add/remove)
   const currentPlayerIds = React.useMemo(() => 
     players.filter(p => p.archived !== true).map(p => p.id).sort().join(","),
     [players]
   )
   
-  // Only re-sort when the set of players changes (add/remove), not on toggle
-  React.useEffect(() => {
+  // Track previous player IDs to detect when sort order should be recalculated
+  const prevPlayerIdsRef = React.useRef<string>("")
+  const sortedIdsRef = React.useRef<string[]>([])
+  
+  // Recalculate sorted order only when player IDs change (add/remove), not on toggle
+  if (prevPlayerIdsRef.current !== currentPlayerIds) {
+    prevPlayerIdsRef.current = currentPlayerIds
     const nonArchived = players.filter(p => p.archived !== true)
     // Sort: active first (alphabetically), then inactive (alphabetically)
     const sorted = [...nonArchived].sort((a, b) => {
@@ -64,8 +66,7 @@ export function PlayerSidebar({
       return a.name.localeCompare(b.name)
     })
     sortedIdsRef.current = sorted.map(p => p.id)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPlayerIds]) // Only re-run when player IDs change, not when active status changes
+  }
 
   // Build visible players list using stored order, applying search filter
   const visiblePlayers = React.useMemo(() => {
@@ -78,7 +79,7 @@ export function PlayerSidebar({
         p.archived !== true &&
         (searchQuery === "" || p.name.toLowerCase().includes(searchQuery.toLowerCase()))
       )
-  }, [players, searchQuery])
+  }, [players, searchQuery, currentPlayerIds])
 
   const activeCount = visiblePlayers.filter(p => p.active).length
 

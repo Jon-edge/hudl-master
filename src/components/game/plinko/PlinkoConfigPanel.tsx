@@ -123,6 +123,23 @@ export function PlinkoConfigPanel({
             />
           )}
         </ConfigRow>
+        <ConfigRow label="Size">
+          <RangeSlider
+            className="flex-1"
+            value={config.ballRadius}
+            onValueChange={v => onConfigChange("ballRadius", v)}
+            min={4}
+            max={20}
+          />
+          <Input
+            className="w-16 h-8 text-xs"
+            type="number"
+            value={config.ballRadius}
+            onChange={e => onConfigChange("ballRadius", Number(e.target.value))}
+            min={4}
+            max={20}
+          />
+        </ConfigRow>
         <ConfigRow label="Bounciness">
           <RangeSlider
             className="flex-1"
@@ -231,8 +248,8 @@ export function PlinkoConfigPanel({
             onChange={e => onConfigChange("pinShape", e.target.value as PlinkoConfig["pinShape"])}
           >
             <option value="ball">Ball</option>
-            <option value="square">Square</option>
-            <option value="triangle">Triangle</option>
+            <option value="square">Square (random rotation)</option>
+            <option value="triangle">Triangle (random rotation)</option>
           </Select>
         </ConfigRow>
         <ConfigRow label="Bounciness">
@@ -243,6 +260,68 @@ export function PlinkoConfigPanel({
             min={0}
             max={1}
             step={0.05}
+          />
+          <Input
+            className="w-16 h-8 text-xs"
+            type="number"
+            value={config.pinRestitution}
+            onChange={e => onConfigChange("pinRestitution", Number(e.target.value))}
+            min={0}
+            max={1}
+            step={0.05}
+          />
+        </ConfigRow>
+        <ConfigRow label="Friction">
+          <RangeSlider
+            className="flex-1"
+            value={config.pinFriction}
+            onValueChange={v => onConfigChange("pinFriction", v)}
+            min={0}
+            max={1}
+            step={0.01}
+          />
+          <Input
+            className="w-16 h-8 text-xs"
+            type="number"
+            value={config.pinFriction}
+            onChange={e => onConfigChange("pinFriction", Number(e.target.value))}
+            min={0}
+            max={1}
+            step={0.01}
+          />
+        </ConfigRow>
+        <ConfigRow label="Wall Gap">
+          <RangeSlider
+            className="flex-1"
+            value={config.pinWallGap}
+            onValueChange={v => onConfigChange("pinWallGap", v)}
+            min={10}
+            max={100}
+          />
+          <Input
+            className="w-16 h-8 text-xs"
+            type="number"
+            value={config.pinWallGap}
+            onChange={e => onConfigChange("pinWallGap", Number(e.target.value))}
+            min={10}
+            max={100}
+          />
+        </ConfigRow>
+        <ConfigRow label="Rim Gap">
+          <RangeSlider
+            className="flex-1"
+            value={config.pinRimGap}
+            onValueChange={v => onConfigChange("pinRimGap", v)}
+            min={10}
+            max={150}
+          />
+          <Input
+            className="w-16 h-8 text-xs"
+            type="number"
+            value={config.pinRimGap}
+            onChange={e => onConfigChange("pinRimGap", Number(e.target.value))}
+            min={10}
+            max={150}
           />
         </ConfigRow>
       </CollapsibleSection>
@@ -284,13 +363,37 @@ export function PlinkoConfigPanel({
           />
         </ConfigRow>
         <ConfigRow label="Ceiling Gap">
+          <RangeSlider
+            className="flex-1"
+            value={config.ceilingGap}
+            onValueChange={v => onConfigChange("ceilingGap", v)}
+            min={20}
+            max={200}
+          />
           <Input
-            className="w-20 h-8 text-xs"
+            className="w-16 h-8 text-xs"
             type="number"
             value={config.ceilingGap}
             onChange={e => onConfigChange("ceilingGap", Number(e.target.value))}
-            min={0}
+            min={20}
             max={200}
+          />
+        </ConfigRow>
+        <ConfigRow label="Wall Thickness">
+          <RangeSlider
+            className="flex-1"
+            value={config.wallThickness}
+            onValueChange={v => onConfigChange("wallThickness", v)}
+            min={5}
+            max={30}
+          />
+          <Input
+            className="w-16 h-8 text-xs"
+            type="number"
+            value={config.wallThickness}
+            onChange={e => onConfigChange("wallThickness", Number(e.target.value))}
+            min={5}
+            max={30}
           />
         </ConfigRow>
       </CollapsibleSection>
@@ -318,13 +421,37 @@ export function PlinkoConfigPanel({
           </Select>
         </ConfigRow>
         <ConfigRow label="Rim Height">
+          <RangeSlider
+            className="flex-1"
+            value={config.rimHeight}
+            onValueChange={v => onConfigChange("rimHeight", v)}
+            min={30}
+            max={200}
+          />
           <Input
-            className="w-20 h-8 text-xs"
+            className="w-16 h-8 text-xs"
             type="number"
             value={config.rimHeight}
             onChange={e => onConfigChange("rimHeight", Number(e.target.value))}
-            min={10}
+            min={30}
             max={200}
+          />
+        </ConfigRow>
+        <ConfigRow label="Rim Width">
+          <RangeSlider
+            className="flex-1"
+            value={config.rimWidth}
+            onValueChange={v => onConfigChange("rimWidth", v)}
+            min={2}
+            max={20}
+          />
+          <Input
+            className="w-16 h-8 text-xs"
+            type="number"
+            value={config.rimWidth}
+            onChange={e => onConfigChange("rimWidth", Number(e.target.value))}
+            min={2}
+            max={20}
           />
         </ConfigRow>
         <ConfigRow label="Destroy Balls">
@@ -334,6 +461,7 @@ export function PlinkoConfigPanel({
             onChange={e => onConfigChange("destroyBalls", e.target.checked)}
             className="w-4 h-4 rounded border-border"
           />
+          <span className="text-xs text-muted-foreground">Remove balls after landing</span>
         </ConfigRow>
       </CollapsibleSection>
 

@@ -138,7 +138,10 @@ export function usePlinkoPhysics({
     Composite.add(engine.world, walls)
 
     // Create pins
-    const xSpacing = (width - config.pinWallGap * 2) / (config.pinColumns - 1)
+    // Ensure minimum wall gap to prevent balls from getting stuck (at least 2 ball diameters)
+    const minWallGap = config.ballRadius * 4
+    const effectiveWallGap = Math.max(config.pinWallGap, minWallGap)
+    const xSpacing = (width - effectiveWallGap * 2) / (config.pinColumns - 1)
     const yStart = config.ceilingGap
     const yEnd = height - config.rimHeight - config.pinRimGap
     const ySpacing = config.pinRows > 1 ? (yEnd - yStart) / (config.pinRows - 1) : 0
@@ -146,13 +149,17 @@ export function usePlinkoPhysics({
     const pins: Matter.Body[] = []
     for (let row = 0; row < config.pinRows; row++) {
       for (let col = 0; col < config.pinColumns; col++) {
-        const x = config.pinWallGap + col * xSpacing + (row % 2 === 0 ? 0 : xSpacing / 2)
+        const x = effectiveWallGap + col * xSpacing + (row % 2 === 0 ? 0 : xSpacing / 2)
         const y = yStart + row * ySpacing
+        // For non-ball shapes, use random rotation for variety
+        const pinAngle = config.pinShape === "ball" 
+          ? 0 
+          : Math.random() * Math.PI * 2
         const pin = makeShape(config.pinShape, x, y, config.pinRadius, {
           isStatic: true,
           restitution: config.pinRestitution,
           friction: config.pinFriction,
-          angle: config.pinShape === "ball" ? 0 : config.pinAngle,
+          angle: pinAngle,
           label: `pin-${row}-${col}`
         })
         pins.push(pin)

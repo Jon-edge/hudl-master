@@ -3,16 +3,12 @@
 import { useRef, useState, useEffect, useCallback, useMemo } from "react"
 import { GameLayout, SidebarToggle } from "./layout/GameLayout"
 import { PlayerSidebar, PlayerManager } from "./shared"
-import {
-  PlinkoGame,
-  PlinkoControls,
-  PlinkoConfigPanel,
-  PlinkoLeaderboard,
-  WinCelebration,
-  defaultConfig,
-  type PlinkoConfig,
-  type PlayerProfile,
-} from "./plinko"
+import { PlinkoGame } from "./plinko/PlinkoGame"
+import { PlinkoControls } from "./plinko/PlinkoControls"
+import { PlinkoConfigPanel } from "./plinko/PlinkoConfigPanel"
+import { PlinkoLeaderboard } from "./plinko/PlinkoLeaderboard"
+import { WinCelebration } from "./plinko/WinCelebration"
+import { defaultConfig, type PlinkoConfig, type PlayerProfile } from "./plinko/types"
 
 const playerStorageKey = "plinko.players.v2"
 const configStorageKey = "plinko.config.v1"
