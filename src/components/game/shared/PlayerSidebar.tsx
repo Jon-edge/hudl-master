@@ -44,15 +44,40 @@ export function PlayerSidebar({
   className,
   title = "Players",
 }: PlayerSidebarProps) {
-  // Filter and sort players
+  // Store the sorted order of player IDs (only re-sort when players are added/removed)
+  const sortedIdsRef = React.useRef<string[]>([])
+  
+  // Get non-archived player IDs for comparison
+  const currentPlayerIds = React.useMemo(() => 
+    players.filter(p => p.archived !== true).map(p => p.id).sort().join(","),
+    [players]
+  )
+  
+  // Only re-sort when the set of players changes (add/remove), not on toggle
+  React.useEffect(() => {
+    const nonArchived = players.filter(p => p.archived !== true)
+    // Sort: active first (alphabetically), then inactive (alphabetically)
+    const sorted = [...nonArchived].sort((a, b) => {
+      if (a.active !== b.active) {
+        return a.active ? -1 : 1
+      }
+      return a.name.localeCompare(b.name)
+    })
+    sortedIdsRef.current = sorted.map(p => p.id)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPlayerIds]) // Only re-run when player IDs change, not when active status changes
+
+  // Build visible players list using stored order, applying search filter
   const visiblePlayers = React.useMemo(() => {
-    const filtered = players
-      .filter(p => p.archived !== true)
-      .filter(p => 
-        searchQuery === "" || 
-        p.name.toLowerCase().includes(searchQuery.toLowerCase())
+    const playerMap = new Map(players.map(p => [p.id, p]))
+    
+    return sortedIdsRef.current
+      .map(id => playerMap.get(id))
+      .filter((p): p is PlayerProfile => 
+        p != null && 
+        p.archived !== true &&
+        (searchQuery === "" || p.name.toLowerCase().includes(searchQuery.toLowerCase()))
       )
-    return filtered.sort((a, b) => a.name.localeCompare(b.name))
   }, [players, searchQuery])
 
   const activeCount = visiblePlayers.filter(p => p.active).length
@@ -135,13 +160,7 @@ function PlayerListItem({
   return (
     <button
       onClick={onToggle}
-      className={cn(
-        "w-full flex items-center gap-3 p-2 rounded-lg transition-all duration-200",
-        "hover:bg-accent/50 active:scale-[0.98]",
-        player.active 
-          ? "bg-accent/30 ring-1 ring-accent/50" 
-          : "bg-transparent"
-      )}
+      className="w-full flex items-center gap-3 p-2 rounded-lg transition-all duration-200 hover:bg-accent/30 active:scale-[0.98]"
     >
       {/* Avatar */}
       <div className="relative shrink-0">
@@ -152,21 +171,16 @@ function PlayerListItem({
           height={36}
           unoptimized
           className={cn(
-            "w-9 h-9 rounded-full object-cover ring-2 transition-all",
-            player.active 
-              ? "ring-primary/50" 
-              : "ring-border/50 opacity-60"
+            "w-9 h-9 rounded-full object-cover ring-2 ring-border/50 transition-all",
+            !player.active && "opacity-50"
           )}
         />
-        {player.active && (
-          <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-game-success rounded-full border-2 border-background" />
-        )}
       </div>
 
       {/* Name */}
       <span className={cn(
         "flex-1 text-left text-sm font-medium truncate transition-colors",
-        player.active ? "text-foreground" : "text-muted-foreground"
+        player.active ? "text-foreground" : "text-muted-foreground/70"
       )}>
         {player.name}
       </span>
