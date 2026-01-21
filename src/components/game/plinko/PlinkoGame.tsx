@@ -58,6 +58,7 @@ export function PlinkoGame({
   // Store callbacks in refs to avoid stale closures
   const onGameEndRef = useRef(onGameEnd)
   const playWinRef = useRef(playWin)
+  const stopRunnerRef = useRef<(() => void) | null>(null)
   useEffect(() => {
     onGameEndRef.current = onGameEnd
     playWinRef.current = playWin
@@ -81,6 +82,7 @@ export function PlinkoGame({
       for (let i = 0; i < counts.length; i++) {
         if (counts[i] >= config.winNth && (liveCountsPrevRef.current[i] || 0) < config.winNth) {
           gameEndedRef.current = true
+          stopRunnerRef.current?.() // Freeze physics - balls stay in place
           playWinRef.current()
           onGameEndRef.current?.([i])
           return
@@ -143,9 +145,10 @@ export function PlinkoGame({
       return
     }
     
-    // Single winner - game ends
+    // Single winner - game ends, freeze physics but keep rendering
     if (winnerBuckets.length === 1) {
       gameEndedRef.current = true
+      stopRunnerRef.current?.() // Freeze physics - balls stay in place
       playWinRef.current()
       onGameEndRef.current?.(winnerBuckets)
     }
@@ -207,13 +210,24 @@ export function PlinkoGame({
     initializeBoard,
     dropBall,
     startRunner,
+    stopRunner,
     cleanup,
   } = usePlinkoPhysics({
     config,
     onBallSettle: handleBallSettle,
     onCollision: handleCollision,
   })
-
+  
+  // Store physics functions in refs to avoid triggering re-initialization
+  const initializeBoardRef = useRef(initializeBoard)
+  const startRunnerRef = useRef(startRunner)
+  const cleanupRef = useRef(cleanup)
+  initializeBoardRef.current = initializeBoard
+  startRunnerRef.current = startRunner
+  cleanupRef.current = cleanup
+  
+  // Update stopRunner ref so checkWinCondition can access it
+  stopRunnerRef.current = stopRunner
 
   // Custom renderer
   const { startRender, stopRender } = usePlinkoRender({
@@ -222,10 +236,17 @@ export function PlinkoGame({
     ballsRef,
     pinsRef,
     bucketBoundsRef,
+    bucketCountsRef,
     config,
     winningBuckets,
     isDark: false,
   })
+  
+  // Store render functions in refs to avoid triggering re-initialization
+  const startRenderRef = useRef(startRender)
+  const stopRenderRef = useRef(stopRender)
+  startRenderRef.current = startRender
+  stopRenderRef.current = stopRender
 
   // Ball dropping interval
   useEffect(() => {
@@ -260,7 +281,7 @@ export function PlinkoGame({
     return () => clearInterval(interval)
   }, [isRunning, config.ballCount, config.width, config.dropLocation, config.ballRadius, config.pinColumns, dropBall])
 
-  // Initialize board and start rendering
+  // Initialize board and start rendering - only when boardKey changes (intentional reset)
   useEffect(() => {
     // Reset all game state FIRST
     droppedRef.current = 0
@@ -273,16 +294,16 @@ export function PlinkoGame({
     zigRef.current = { x: config.width / 2, dir: 1 }
     particleEmitterRef.current.clear()
     
-    // THEN initialize the board and start
-    initializeBoard()
-    startRender()
-    startRunner()
+    // THEN initialize the board and start (using refs to avoid dependency issues)
+    initializeBoardRef.current()
+    startRenderRef.current()
+    startRunnerRef.current()
     
     return () => {
-      stopRender()
-      cleanup()
+      stopRenderRef.current()
+      cleanupRef.current()
     }
-  }, [boardKey, config.bucketCount, config.width, initializeBoard, startRender, startRunner, stopRender, cleanup])
+  }, [boardKey, config.bucketCount, config.width])
 
   // Particle render loop (draws on top of main render)
   useEffect(() => {

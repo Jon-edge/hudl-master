@@ -53,6 +53,7 @@ export interface UsePlinkoRenderOptions {
   ballsRef: React.RefObject<Matter.Body[]>
   pinsRef: React.RefObject<Matter.Body[]>
   bucketBoundsRef: React.RefObject<number[]>
+  bucketCountsRef: React.RefObject<number[]>
   config: PlinkoConfig
   winningBuckets?: number[]
   isDark?: boolean
@@ -73,6 +74,7 @@ export function usePlinkoRender({
   ballsRef,
   pinsRef,
   bucketBoundsRef,
+  bucketCountsRef,
   config,
   winningBuckets = [],
   isDark = false,
@@ -115,6 +117,7 @@ export function usePlinkoRender({
 
     // Draw bucket zones
     const bounds = bucketBoundsRef.current
+    const counts = bucketCountsRef.current
     if (bounds.length > 0) {
       for (let i = 0; i < bounds.length - 1; i++) {
         const isWinning = winningBuckets.includes(i)
@@ -130,6 +133,28 @@ export function usePlinkoRender({
         if (i > 0) {
           ctx.fillStyle = theme.bucketDivider
           ctx.fillRect(x1 - config.rimWidth / 2, bucketY, config.rimWidth, config.rimHeight)
+        }
+        
+        // Draw ball count inside bucket (aligned to top)
+        const count = counts[i] || 0
+        if (count > 0) {
+          const bucketCenterX = (x1 + x2) / 2
+          const circleRadius = Math.min(18, (x2 - x1) / 3)
+          // Position at top of bucket with padding
+          const countY = bucketY + circleRadius + 4
+          
+          // Count background circle
+          ctx.fillStyle = isWinning ? "rgba(34, 197, 94, 0.9)" : "rgba(0, 0, 0, 0.5)"
+          ctx.beginPath()
+          ctx.arc(bucketCenterX, countY, circleRadius, 0, Math.PI * 2)
+          ctx.fill()
+          
+          // Count text
+          ctx.fillStyle = "#ffffff"
+          ctx.font = `bold ${Math.min(14, circleRadius)}px system-ui, sans-serif`
+          ctx.textAlign = "center"
+          ctx.textBaseline = "middle"
+          ctx.fillText(count.toString(), bucketCenterX, countY)
         }
       }
       // Last divider
@@ -287,7 +312,7 @@ export function usePlinkoRender({
 
     // Schedule next frame
     animationRef.current = requestAnimationFrame(render)
-  }, [canvasRef, engineRef, ballsRef, pinsRef, bucketBoundsRef, config, winningBuckets, isDark, theme])
+  }, [canvasRef, engineRef, ballsRef, pinsRef, bucketBoundsRef, bucketCountsRef, config, winningBuckets, isDark, theme])
 
   const startRender = useCallback(() => {
     if (animationRef.current === null) {
