@@ -63,6 +63,9 @@ export function PlinkoGame({
     playWinRef.current = playWin
   }, [onGameEnd, playWin])
 
+  // Track tiebreaker rounds
+  const tiebreakerRoundRef = useRef(0)
+  
   // Check win condition
   const checkWinCondition = useCallback(() => {
     if (gameEndedRef.current) return
@@ -73,6 +76,7 @@ export function PlinkoGame({
     const expectedBalls = config.ballCount
     
     // For "nth" condition, check during play (first bucket to reach N balls wins)
+    // No tiebreaker needed - first to reach N wins
     if (config.winCondition === "nth") {
       for (let i = 0; i < counts.length; i++) {
         if (counts[i] >= config.winNth && (liveCountsPrevRef.current[i] || 0) < config.winNth) {
@@ -96,6 +100,7 @@ export function PlinkoGame({
     
     switch (config.winCondition) {
       case "first":
+        // "first" condition has no ties - single winner
         if (firstBallBucketRef.current !== null) {
           winnerBuckets = [firstBallBucketRef.current]
         }
@@ -126,7 +131,20 @@ export function PlinkoGame({
       }
     }
     
-    if (winnerBuckets.length > 0) {
+    // Check for ties - if multiple winners, start tiebreaker round
+    if (winnerBuckets.length > 1) {
+      // Tiebreaker: reset drop counters but KEEP bucket counts (they accumulate)
+      // This allows another round of balls to be dropped
+      tiebreakerRoundRef.current += 1
+      droppedRef.current = 0
+      settledCountRef.current = 0
+      console.log(`Tiebreaker round ${tiebreakerRoundRef.current} - tied buckets:`, winnerBuckets)
+      // Game continues - don't end, don't assign wins
+      return
+    }
+    
+    // Single winner - game ends
+    if (winnerBuckets.length === 1) {
       gameEndedRef.current = true
       playWinRef.current()
       onGameEndRef.current?.(winnerBuckets)
@@ -214,9 +232,12 @@ export function PlinkoGame({
     if (!isRunning) return
     
     const interval = setInterval(() => {
-      // Stop dropping if we've reached the ball count (0 = unlimited)
+      // Skip dropping if game has ended
+      if (gameEndedRef.current) return
+      
+      // Skip dropping if we've reached the ball count for this round (0 = unlimited)
+      // Don't clear interval - tiebreaker may reset droppedRef to continue
       if (config.ballCount > 0 && droppedRef.current >= config.ballCount) {
-        clearInterval(interval)
         return
       }
       
@@ -247,6 +268,7 @@ export function PlinkoGame({
     bucketCountsRef.current = new Array(config.bucketCount).fill(0)
     firstBallBucketRef.current = null
     gameEndedRef.current = false
+    tiebreakerRoundRef.current = 0
     liveCountsPrevRef.current = new Array(config.bucketCount).fill(0)
     zigRef.current = { x: config.width / 2, dir: 1 }
     particleEmitterRef.current.clear()
