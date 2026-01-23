@@ -270,8 +270,8 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     setStarted(false)
     setRoundWinnerBuckets(winningBuckets)
 
-    // Increment wins for winning players
-    if (allowWinCountRef.current) {
+    // Increment wins for winning players (skip if config panel is open)
+    if (allowWinCountRef.current && !showConfig) {
       const winningPlayerIds = winningBuckets
         .map(bucket => bucketAssignments[bucket])
         .filter(Boolean)
@@ -294,7 +294,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
       }
       allowWinCountRef.current = false
     }
-  }, [bucketAssignments, persistPlayers])
+  }, [bucketAssignments, persistPlayers, showConfig])
 
   // Config change handler
   const handleConfigChange = <K extends keyof PlinkoConfig>(key: K, value: PlinkoConfig[K]) => {
