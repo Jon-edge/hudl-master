@@ -15,7 +15,7 @@ export interface UseGameSoundsOptions {
 export interface UseGameSoundsReturn {
   playCollision: (velocity?: number) => void
   playBucket: () => void
-  playWin: () => void
+  playWin: (winnerName?: string) => void
   isMuted: boolean
   setMuted: (muted: boolean) => void
   volume: number
@@ -123,16 +123,32 @@ export function useGameSounds({
     setTimeout(() => playTone(BUCKET_FREQUENCY * 1.5, 0.1, "sine", 0.01, 0.05), 50)
   }, [isMuted, playTone])
 
-  // Win celebration sound - ascending arpeggio
-  const playWin = useCallback(() => {
+  // Win celebration sound - plays personalized sound or ascending arpeggio fallback
+  const playWin = useCallback((winnerName?: string) => {
     if (isMuted) return
     
+    // Try to play personalized winner sound if name provided
+    if (winnerName) {
+      const audio = new Audio(`https://nyc3.digitaloceanspaces.com/edgecontent/UI4/hudl/${winnerName.toLowerCase()}.wav`)
+      audio.volume = volume
+      audio.play().catch(() => {
+        // Fallback to arpeggio if personalized sound fails
+        WIN_FREQUENCIES.forEach((freq, i) => {
+          setTimeout(() => {
+            playTone(freq, 0.3, "sine", 0.02, 0.15)
+          }, i * 100)
+        })
+      })
+      return
+    }
+    
+    // Default arpeggio
     WIN_FREQUENCIES.forEach((freq, i) => {
       setTimeout(() => {
         playTone(freq, 0.3, "sine", 0.02, 0.15)
       }, i * 100)
     })
-  }, [isMuted, playTone])
+  }, [isMuted, playTone, volume])
 
   // Cleanup
   useEffect(() => {

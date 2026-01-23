@@ -55,14 +55,26 @@ export function PlinkoGame({
     enabled: soundEnabled,
   })
 
-  // Store callbacks in refs to avoid stale closures
+  // Store callbacks and props in refs to avoid stale closures
   const onGameEndRef = useRef(onGameEnd)
   const playWinRef = useRef(playWin)
   const stopRunnerRef = useRef<(() => void) | null>(null)
+  const bucketAssignmentsRef = useRef(bucketAssignments)
+  const playersRef = useRef(players)
   useEffect(() => {
     onGameEndRef.current = onGameEnd
     playWinRef.current = playWin
-  }, [onGameEnd, playWin])
+    bucketAssignmentsRef.current = bucketAssignments
+    playersRef.current = players
+  }, [onGameEnd, playWin, bucketAssignments, players])
+  
+  // Helper to get winner name from bucket index
+  const getWinnerName = (bucketIndex: number): string | undefined => {
+    const playerId = bucketAssignmentsRef.current[bucketIndex]
+    if (!playerId) return undefined
+    const player = playersRef.current.find(p => p.id === playerId)
+    return player?.name
+  }
 
   // Track tiebreaker rounds
   const tiebreakerRoundRef = useRef(0)
@@ -83,7 +95,7 @@ export function PlinkoGame({
         if (counts[i] >= config.winNth && (liveCountsPrevRef.current[i] || 0) < config.winNth) {
           gameEndedRef.current = true
           stopRunnerRef.current?.() // Freeze physics - balls stay in place
-          playWinRef.current()
+          playWinRef.current(getWinnerName(i))
           onGameEndRef.current?.([i])
           return
         }
@@ -149,7 +161,7 @@ export function PlinkoGame({
     if (winnerBuckets.length === 1) {
       gameEndedRef.current = true
       stopRunnerRef.current?.() // Freeze physics - balls stay in place
-      playWinRef.current()
+      playWinRef.current(getWinnerName(winnerBuckets[0]))
       onGameEndRef.current?.(winnerBuckets)
     }
   }, [config.ballCount, config.winCondition, config.winNth])
