@@ -436,23 +436,6 @@ export function PlinkoConfigPanel({
             max={200}
           />
         </ConfigRow>
-        <ConfigRow label="Wall Thickness">
-          <RangeSlider
-            className="flex-1"
-            value={config.wallThickness}
-            onValueChange={v => onConfigChange("wallThickness", v)}
-            min={5}
-            max={30}
-          />
-          <Input
-            className="w-16 h-8 text-xs"
-            type="number"
-            value={config.wallThickness}
-            onChange={e => onConfigChange("wallThickness", Number(e.target.value))}
-            min={5}
-            max={30}
-          />
-        </ConfigRow>
       </CollapsibleSection>
 
       {/* Buckets Section */}
