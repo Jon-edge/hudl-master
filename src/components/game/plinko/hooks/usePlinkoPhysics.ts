@@ -109,11 +109,11 @@ export function usePlinkoPhysics({
       Engine.clear(engineRef.current)
     }
     
-    // Create fresh engine
+    // Create fresh engine with higher precision to prevent ball tunneling
     const engine = Engine.create()
-    engine.positionIterations = 8
-    engine.velocityIterations = 6
-    engine.constraintIterations = 2
+    engine.positionIterations = 12
+    engine.velocityIterations = 10
+    engine.constraintIterations = 4
     
     engineRef.current = engine
     settledBallsRef.current = new Set()
@@ -122,16 +122,13 @@ export function usePlinkoPhysics({
 
     const { width, height } = config
 
-    // Create walls
+    // Create walls - floor must be thick enough to prevent tunneling (min 50px)
+    const floorThickness = Math.max(config.wallThickness, 50)
     const walls = [
       Bodies.rectangle(width / 2, -25, width, 50, { isStatic: true, label: "wall-ceiling" }),
-      Bodies.rectangle(width / 2, height - config.wallThickness / 2, width, config.wallThickness, { 
+      Bodies.rectangle(width / 2, height - floorThickness / 2, width, floorThickness, { 
         isStatic: true, 
         label: "wall-floor" 
-      }),
-      Bodies.rectangle(width / 2, height + config.wallThickness / 2, width, config.wallThickness, { 
-        isStatic: true,
-        label: "wall-safety"
       }),
       Bodies.rectangle(-25, height / 2, 50, height, { isStatic: true, label: "wall-left" }),
       Bodies.rectangle(width + 25, height / 2, 50, height, { isStatic: true, label: "wall-right" })
@@ -204,6 +201,8 @@ export function usePlinkoPhysics({
       const currentBounds = bucketBoundsRef.current
       const currentConfig = configRef.current
       const settleZone = currentConfig.height - 60
+      // Safety threshold: if ball falls this far below the floor, it has escaped
+      const escapeThreshold = currentConfig.height + 100
       
       ballsRef.current.forEach((ball) => {
         if (settledBallsRef.current.has(ball.id)) return
@@ -211,7 +210,12 @@ export function usePlinkoPhysics({
         // Check if ball has settled (low velocity and in bucket zone)
         // Using both vertical and horizontal velocity for more reliable detection
         const speed = Math.sqrt(ball.velocity.x ** 2 + ball.velocity.y ** 2)
-        if (ball.position.y > settleZone && speed < 2) {
+        const isInSettleZone = ball.position.y > settleZone && speed < 2
+        // Safety net: ball has fallen through the floor (tunneling)
+        const hasEscaped = ball.position.y > escapeThreshold
+        
+        if (isInSettleZone || hasEscaped) {
+          // Determine bucket based on x position
           let bucketIndex = -1
           for (let i = 0; i < currentBounds.length - 1; i++) {
             if (ball.position.x >= currentBounds[i] && ball.position.x < currentBounds[i + 1]) {
@@ -220,16 +224,29 @@ export function usePlinkoPhysics({
             }
           }
           
+          // Fallback: if ball x is outside bounds, clamp to nearest bucket
+          if (bucketIndex < 0 && currentBounds.length > 1) {
+            if (ball.position.x < currentBounds[0]) {
+              bucketIndex = 0 // Left-most bucket
+            } else {
+              bucketIndex = currentBounds.length - 2 // Right-most bucket
+            }
+          }
+          
           if (bucketIndex >= 0) {
             settledBallsRef.current.add(ball.id)
+            
+            if (hasEscaped) {
+              console.warn(`Ball ${ball.id} escaped through floor at y=${ball.position.y.toFixed(1)}, assigned to bucket ${bucketIndex}`)
+            }
             
             // Call the settle callback
             if (onBallSettleRef.current) {
               onBallSettleRef.current(bucketIndex)
             }
             
-            // Optionally destroy the ball
-            if (currentConfig.destroyBalls) {
+            // Remove escaped balls or optionally destroy settled balls
+            if (hasEscaped || currentConfig.destroyBalls) {
               Composite.remove(engine.world, ball)
               ballsRef.current = ballsRef.current.filter(b => b.id !== ball.id)
             }
