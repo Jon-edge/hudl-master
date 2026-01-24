@@ -122,16 +122,16 @@ export function usePlinkoPhysics({
 
     const { width, height } = config
 
-    // Create walls - floor must be thick enough to prevent tunneling (min 50px)
-    const floorThickness = Math.max(config.wallThickness, 50)
+    // Create walls - all walls thick enough to prevent tunneling at high velocities
+    const wallThickness = 200
     const walls = [
-      Bodies.rectangle(width / 2, -25, width, 50, { isStatic: true, label: "wall-ceiling" }),
-      Bodies.rectangle(width / 2, height - floorThickness / 2, width, floorThickness, { 
+      Bodies.rectangle(width / 2, -wallThickness / 2, width + wallThickness * 2, wallThickness, { isStatic: true, label: "wall-ceiling" }),
+      Bodies.rectangle(width / 2, height + wallThickness / 2, width + wallThickness * 2, wallThickness, { 
         isStatic: true, 
         label: "wall-floor" 
       }),
-      Bodies.rectangle(-25, height / 2, 50, height, { isStatic: true, label: "wall-left" }),
-      Bodies.rectangle(width + 25, height / 2, 50, height, { isStatic: true, label: "wall-right" })
+      Bodies.rectangle(-wallThickness / 2, height / 2, wallThickness, height + wallThickness * 2, { isStatic: true, label: "wall-left" }),
+      Bodies.rectangle(width + wallThickness / 2, height / 2, wallThickness, height + wallThickness * 2, { isStatic: true, label: "wall-right" })
     ]
     Composite.add(engine.world, walls)
 
@@ -284,7 +284,12 @@ export function usePlinkoPhysics({
       
       // Convert to velocity vector
       const vx = Math.cos(angle) * config.dropVelocity
-      const vy = Math.sin(angle) * config.dropVelocity
+      let vy = Math.sin(angle) * config.dropVelocity
+      
+      // Ensure vy is always positive (downward) - prevent balls from flying off screen
+      vy = Math.abs(vy)
+      // Also ensure a minimum downward velocity to prevent balls getting stuck
+      vy = Math.max(vy, config.dropVelocity * 0.1)
       
       Body.setVelocity(ball, { x: vx, y: vy })
     }
