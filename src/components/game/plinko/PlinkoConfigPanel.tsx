@@ -347,40 +347,6 @@ export function PlinkoConfigPanel({
             step={0.01}
           />
         </ConfigRow>
-        <ConfigRow label="Wall Gap">
-          <RangeSlider
-            className="flex-1"
-            value={config.pinWallGap}
-            onValueChange={v => onConfigChange("pinWallGap", v)}
-            min={10}
-            max={100}
-          />
-          <Input
-            className="w-16 h-8 text-xs"
-            type="number"
-            value={config.pinWallGap}
-            onChange={e => onConfigChange("pinWallGap", Number(e.target.value))}
-            min={10}
-            max={100}
-          />
-        </ConfigRow>
-        <ConfigRow label="Rim Gap">
-          <RangeSlider
-            className="flex-1"
-            value={config.pinRimGap}
-            onValueChange={v => onConfigChange("pinRimGap", v)}
-            min={10}
-            max={150}
-          />
-          <Input
-            className="w-16 h-8 text-xs"
-            type="number"
-            value={config.pinRimGap}
-            onChange={e => onConfigChange("pinRimGap", Number(e.target.value))}
-            min={10}
-            max={150}
-          />
-        </ConfigRow>
       </CollapsibleSection>
 
       {/* Board Section */}
@@ -434,6 +400,40 @@ export function PlinkoConfigPanel({
             onChange={e => onConfigChange("ceilingGap", Number(e.target.value))}
             min={20}
             max={200}
+          />
+        </ConfigRow>
+        <ConfigRow label="Wall Gap">
+          <RangeSlider
+            className="flex-1"
+            value={config.pinWallGap}
+            onValueChange={v => onConfigChange("pinWallGap", v)}
+            min={10}
+            max={100}
+          />
+          <Input
+            className="w-16 h-8 text-xs"
+            type="number"
+            value={config.pinWallGap}
+            onChange={e => onConfigChange("pinWallGap", Number(e.target.value))}
+            min={10}
+            max={100}
+          />
+        </ConfigRow>
+        <ConfigRow label="Rim Gap">
+          <RangeSlider
+            className="flex-1"
+            value={config.pinRimGap}
+            onValueChange={v => onConfigChange("pinRimGap", v)}
+            min={10}
+            max={150}
+          />
+          <Input
+            className="w-16 h-8 text-xs"
+            type="number"
+            value={config.pinRimGap}
+            onChange={e => onConfigChange("pinRimGap", Number(e.target.value))}
+            min={10}
+            max={150}
           />
         </ConfigRow>
       </CollapsibleSection>
