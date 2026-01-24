@@ -139,7 +139,12 @@ export function usePlinkoPhysics({
     // Ensure minimum wall gap to prevent balls from getting stuck (at least 2 ball diameters)
     const minWallGap = config.ballRadius * 4
     const effectiveWallGap = Math.max(config.pinWallGap, minWallGap)
-    const xSpacing = (width - effectiveWallGap * 2) / (config.pinColumns - 1)
+    // Calculate spacing so that offset rows (which add half-spacing) still stay within bounds
+    // For offset rows: rightmost pin = effectiveWallGap + (cols-1)*spacing + spacing/2
+    // We want this to equal width - effectiveWallGap, so:
+    // spacing * (cols - 1 + 0.5) = width - 2*effectiveWallGap
+    // spacing = (width - 2*effectiveWallGap) / (cols - 0.5)
+    const xSpacing = (width - effectiveWallGap * 2) / (config.pinColumns - 0.5)
     const yStart = config.ceilingGap
     const yEnd = height - config.rimHeight - config.pinRimGap
     const ySpacing = config.pinRows > 1 ? (yEnd - yStart) / (config.pinRows - 1) : 0
