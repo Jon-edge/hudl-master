@@ -434,6 +434,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
         rightSidebarOpen={rightSidebarOpen}
         onLeftSidebarToggle={() => setLeftSidebarOpen(!leftSidebarOpen)}
         onRightSidebarToggle={() => setRightSidebarOpen(!rightSidebarOpen)}
+        forceRightPinned={showConfig}
         leftSidebar={
           <PlayerSidebar
             players={visiblePlayers}
