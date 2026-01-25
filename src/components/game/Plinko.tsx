@@ -8,6 +8,7 @@ import { PlinkoControls } from "./plinko/PlinkoControls"
 import { PlinkoConfigPanel } from "./plinko/PlinkoConfigPanel"
 import { PlinkoLeaderboard } from "./plinko/PlinkoLeaderboard"
 import { WinCelebration } from "./plinko/WinCelebration"
+import { TiebreakerAnnouncement } from "./plinko/TiebreakerAnnouncement"
 import { defaultConfig, type PlinkoConfig, type PlayerProfile } from "./plinko/types"
 
 const playerStorageKey = "plinko.players.v2"
@@ -163,6 +164,8 @@ export function Plinko({ initialConfig }: PlinkoProps) {
   const [bucketAssignments, setBucketAssignments] = useState<string[]>([])
   const [roundWinnerBuckets, setRoundWinnerBuckets] = useState<number[]>([])
   const [showWinCelebration, setShowWinCelebration] = useState(false)
+  const [showTiebreaker, setShowTiebreaker] = useState(false)
+  const [tiebreakerRound, setTiebreakerRound] = useState(0)
   const [soundEnabled, setSoundEnabled] = useState(true)
 
   // Save/Load State
@@ -284,6 +287,8 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     setStarted(true)
     setRoundWinnerBuckets([])
     setShowWinCelebration(false)
+    setShowTiebreaker(false)
+    setTiebreakerRound(0)
     allowWinCountRef.current = true
 
     if (hasStartedOnceRef.current) {
@@ -327,6 +332,12 @@ export function Plinko({ initialConfig }: PlinkoProps) {
       allowWinCountRef.current = false
     }
   }, [bucketAssignments, persistPlayers, showConfig])
+
+  // Handle tiebreaker announcement
+  const handleTiebreaker = useCallback((roundNumber: number) => {
+    setTiebreakerRound(roundNumber)
+    setShowTiebreaker(true)
+  }, [])
 
   // Config change handler
   const handleConfigChange = <K extends keyof PlinkoConfig>(key: K, value: PlinkoConfig[K]) => {
@@ -477,16 +488,24 @@ export function Plinko({ initialConfig }: PlinkoProps) {
         }
         mainContent={
           <div className="flex flex-col items-center gap-4">
-            <PlinkoGame
-              key={boardKey}
-              config={config}
-              bucketAssignments={bucketAssignments}
-              players={visiblePlayers}
-              isRunning={started}
-              onGameEnd={handleGameEnd}
-              winningBuckets={roundWinnerBuckets}
-              soundEnabled={soundEnabled}
-            />
+            <div className="relative">
+              <PlinkoGame
+                key={boardKey}
+                config={config}
+                bucketAssignments={bucketAssignments}
+                players={visiblePlayers}
+                isRunning={started}
+                onGameEnd={handleGameEnd}
+                onTiebreaker={handleTiebreaker}
+                winningBuckets={roundWinnerBuckets}
+                soundEnabled={soundEnabled}
+              />
+              <TiebreakerAnnouncement
+                isVisible={showTiebreaker}
+                roundNumber={tiebreakerRound}
+                onComplete={() => setShowTiebreaker(false)}
+              />
+            </div>
             <PlinkoControls
               isRunning={started}
               onStart={startGame}

@@ -278,6 +278,118 @@
   }
 }
 
+/* Tiebreaker announcement animations */
+@keyframes tiebreaker-enter {
+  0% {
+    transform: scaleX(0) scaleY(2);
+    opacity: 0;
+  }
+  50% {
+    transform: scaleX(1.2) scaleY(0.8);
+    opacity: 1;
+  }
+  100% {
+    transform: scaleX(1) scaleY(1);
+    opacity: 1;
+  }
+}
+
+@keyframes tiebreaker-exit {
+  0% {
+    transform: scaleX(1) scaleY(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scaleX(1.1) scaleY(0.9);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scaleX(0) scaleY(3);
+    opacity: 0;
+  }
+}
+
+@keyframes chromatic-red {
+  0%, 100% {
+    transform: translate(-2px, 0);
+  }
+  50% {
+    transform: translate(-3px, 1px);
+  }
+}
+
+@keyframes chromatic-cyan {
+  0%, 100% {
+    transform: translate(2px, 0);
+  }
+  50% {
+    transform: translate(3px, -1px);
+  }
+}
+
+@keyframes scanlines {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 0 4px;
+  }
+}
+
+@keyframes slice-line {
+  0% {
+    opacity: 0;
+    transform: scaleX(0);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes electric-left {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+@keyframes electric-right {
+  0% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+}
+
+@keyframes fade-up {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* Scrollbar styling for glass aesthetic */
 @layer utilities {
   .scrollbar-glass {
