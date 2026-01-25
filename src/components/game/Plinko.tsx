@@ -12,6 +12,7 @@ import { defaultConfig, type PlinkoConfig, type PlayerProfile } from "./plinko/t
 
 const playerStorageKey = "plinko.players.v2"
 const configStorageKey = "plinko.config.v1"
+const initialBoardScale = 0.6 // proportion of viewport for initial board size
 
 // API helpers with localStorage fallback
 async function loadPlayersFromAPI(): Promise<PlayerProfile[] | null> {
@@ -114,6 +115,17 @@ export interface PlinkoProps {
   initialConfig?: PlinkoConfig
 }
 
+function getResponsiveBoardSize(): { width: number; height: number } {
+  const targetWidth = Math.round(window.innerWidth * initialBoardScale)
+  const targetHeight = Math.round(window.innerHeight * Math.min(.7, initialBoardScale * 1.2)) // Side panels allow board height to exceed width
+  
+  // Clamp to config slider ranges (width: 300-1000, height: 300-800)
+  const width = Math.max(300, Math.min(1000, targetWidth))
+  const height = Math.max(300, Math.min(800, targetHeight))
+  
+  return { width, height }
+}
+
 export function Plinko({ initialConfig }: PlinkoProps) {
   // UI State
   const [started, setStarted] = useState(false)
@@ -124,8 +136,27 @@ export function Plinko({ initialConfig }: PlinkoProps) {
   const [playerSearchQuery, setPlayerSearchQuery] = useState("")
   const [boardKey, setBoardKey] = useState(0)
 
-  // Game State
+  // Game State - start with defaults, then apply responsive size on mount
   const [config, setConfig] = useState<PlinkoConfig>(initialConfig ?? defaultConfig)
+  
+  // Track if we've applied responsive sizing (only do it once on mount)
+  const hasAppliedResponsiveSizeRef = useRef(false)
+  
+  // Apply responsive board size on mount (client-side only, avoids hydration mismatch)
+  useEffect(() => {
+    if (hasAppliedResponsiveSizeRef.current) return
+    hasAppliedResponsiveSizeRef.current = true
+    
+    // Only apply if no initialConfig was provided with explicit dimensions
+    if (initialConfig?.width && initialConfig?.height) return
+    
+    const responsiveSize = getResponsiveBoardSize()
+    setConfig(prev => ({
+      ...prev,
+      width: responsiveSize.width,
+      height: responsiveSize.height,
+    }))
+  }, [])
   const [players, setPlayers] = useState<PlayerProfile[]>(defaultPlayers)
   const [draftPlayers, setDraftPlayers] = useState<PlayerProfile[]>(defaultPlayers)
   const [playersDirty, setPlayersDirty] = useState(false)
