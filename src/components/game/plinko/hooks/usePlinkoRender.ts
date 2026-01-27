@@ -157,10 +157,6 @@ export function usePlinkoRender({
           ctx.fillText(count.toString(), bucketCenterX, countY)
         }
       }
-      // Last divider
-      const lastX = bounds[bounds.length - 1]
-      ctx.fillStyle = theme.bucketDivider
-      ctx.fillRect(lastX - config.rimWidth / 2, height - config.rimHeight, config.rimWidth, config.rimHeight)
     }
 
     // Clean up old hit pins

@@ -18,6 +18,7 @@ export interface PlinkoGameProps {
   isRunning: boolean
   onGameEnd?: (winningBuckets: number[]) => void
   onBallSettle?: (bucketIndex: number) => void
+  onTiebreaker?: (roundNumber: number) => void
   winningBuckets?: number[]
   className?: string
   soundEnabled?: boolean
@@ -33,6 +34,7 @@ export function PlinkoGame({
   isRunning,
   onGameEnd,
   onBallSettle: onBallSettleProp,
+  onTiebreaker,
   winningBuckets = [],
   className,
   soundEnabled = true,
@@ -51,22 +53,26 @@ export function PlinkoGame({
   const liveCountsPrevRef = useRef<number[]>([])
 
   // Sound effects
-  const { playCollision, playBucket, playWin } = useGameSounds({
+  const { playCollision, playBucket, playWin, playTiebreaker } = useGameSounds({
     enabled: soundEnabled,
   })
 
   // Store callbacks and props in refs to avoid stale closures
   const onGameEndRef = useRef(onGameEnd)
+  const onTiebreakerRef = useRef(onTiebreaker)
   const playWinRef = useRef(playWin)
+  const playTiebreakerRef = useRef(playTiebreaker)
   const stopRunnerRef = useRef<(() => void) | null>(null)
   const bucketAssignmentsRef = useRef(bucketAssignments)
   const playersRef = useRef(players)
   useEffect(() => {
     onGameEndRef.current = onGameEnd
+    onTiebreakerRef.current = onTiebreaker
     playWinRef.current = playWin
+    playTiebreakerRef.current = playTiebreaker
     bucketAssignmentsRef.current = bucketAssignments
     playersRef.current = players
-  }, [onGameEnd, playWin, bucketAssignments, players])
+  }, [onGameEnd, onTiebreaker, playWin, playTiebreaker, bucketAssignments, players])
   
   // Helper to get winner name from bucket index
   const getWinnerName = (bucketIndex: number): string | undefined => {
@@ -153,6 +159,9 @@ export function PlinkoGame({
       droppedRef.current = 0
       settledCountRef.current = 0
       console.log(`Tiebreaker round ${tiebreakerRoundRef.current} - tied buckets:`, winnerBuckets)
+      // Play tiebreaker sound and notify parent
+      playTiebreakerRef.current?.()
+      onTiebreakerRef.current?.(tiebreakerRoundRef.current)
       // Game continues - don't end, don't assign wins
       return
     }

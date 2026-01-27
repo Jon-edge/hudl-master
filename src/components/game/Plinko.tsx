@@ -8,10 +8,12 @@ import { PlinkoControls } from "./plinko/PlinkoControls"
 import { PlinkoConfigPanel } from "./plinko/PlinkoConfigPanel"
 import { PlinkoLeaderboard } from "./plinko/PlinkoLeaderboard"
 import { WinCelebration } from "./plinko/WinCelebration"
+import { TiebreakerAnnouncement } from "./plinko/TiebreakerAnnouncement"
 import { defaultConfig, type PlinkoConfig, type PlayerProfile } from "./plinko/types"
 
 const playerStorageKey = "plinko.players.v2"
 const configStorageKey = "plinko.config.v1"
+const initialBoardScale = 0.6 // proportion of viewport for initial board size
 
 // API helpers with localStorage fallback
 async function loadPlayersFromAPI(): Promise<PlayerProfile[] | null> {
@@ -81,6 +83,7 @@ const defaultPlayers: PlayerProfile[] = [
   { id: makePlayerId(), name: "Jon", wins: 0, active: true, avatarUrl: "https://ca.slack-edge.com/T08U86VNU-U02E91B4U66-1b9a90423a90-512" },
   { id: makePlayerId(), name: "Madison", wins: 0, active: true, avatarUrl: "https://ca.slack-edge.com/T08U86VNU-U026T9FAGQ7-90a4aaa8f62c-512" },
   { id: makePlayerId(), name: "Matt", wins: 0, active: true, avatarUrl: "https://ca.slack-edge.com/T08U86VNU-U8U5ANCF8-3bfdde800605-512" },
+  { id: makePlayerId(), name: "Michael", wins: 0, active: true, avatarUrl: "https://ca.slack-edge.com/T08U86VNU-U019XM6PTJA-430d597450fe-512" },
   { id: makePlayerId(), name: "Paul", wins: 0, active: true, avatarUrl: "https://ca.slack-edge.com/T08U86VNU-U08U8DPR9-03d672ef101c-512" },
   { id: makePlayerId(), name: "RJ", wins: 0, active: true, avatarUrl: "https://ca.slack-edge.com/T08U86VNU-U0990R1S6-b47fdae676a6-192" },
   { id: makePlayerId(), name: "Sam", wins: 0, active: true, avatarUrl: "https://ca.slack-edge.com/T08U86VNU-U01DXBN6A3S-8720534b422b-512" },
@@ -113,6 +116,17 @@ export interface PlinkoProps {
   initialConfig?: PlinkoConfig
 }
 
+function getResponsiveBoardSize(): { width: number; height: number } {
+  const targetWidth = Math.round(window.innerWidth * initialBoardScale)
+  const targetHeight = Math.round(window.innerHeight * Math.min(.7, initialBoardScale * 1.2)) // Side panels allow board height to exceed width
+  
+  // Clamp to config slider ranges (width: 300-1000, height: 300-800)
+  const width = Math.max(300, Math.min(1000, targetWidth))
+  const height = Math.max(300, Math.min(800, targetHeight))
+  
+  return { width, height }
+}
+
 export function Plinko({ initialConfig }: PlinkoProps) {
   // UI State
   const [started, setStarted] = useState(false)
@@ -123,14 +137,35 @@ export function Plinko({ initialConfig }: PlinkoProps) {
   const [playerSearchQuery, setPlayerSearchQuery] = useState("")
   const [boardKey, setBoardKey] = useState(0)
 
-  // Game State
+  // Game State - start with defaults, then apply responsive size on mount
   const [config, setConfig] = useState<PlinkoConfig>(initialConfig ?? defaultConfig)
+  
+  // Track if we've applied responsive sizing (only do it once on mount)
+  const hasAppliedResponsiveSizeRef = useRef(false)
+  
+  // Apply responsive board size on mount (client-side only, avoids hydration mismatch)
+  useEffect(() => {
+    if (hasAppliedResponsiveSizeRef.current) return
+    hasAppliedResponsiveSizeRef.current = true
+    
+    // Only apply if no initialConfig was provided with explicit dimensions
+    if (initialConfig?.width && initialConfig?.height) return
+    
+    const responsiveSize = getResponsiveBoardSize()
+    setConfig(prev => ({
+      ...prev,
+      width: responsiveSize.width,
+      height: responsiveSize.height,
+    }))
+  }, [])
   const [players, setPlayers] = useState<PlayerProfile[]>(defaultPlayers)
   const [draftPlayers, setDraftPlayers] = useState<PlayerProfile[]>(defaultPlayers)
   const [playersDirty, setPlayersDirty] = useState(false)
   const [bucketAssignments, setBucketAssignments] = useState<string[]>([])
   const [roundWinnerBuckets, setRoundWinnerBuckets] = useState<number[]>([])
   const [showWinCelebration, setShowWinCelebration] = useState(false)
+  const [showTiebreaker, setShowTiebreaker] = useState(false)
+  const [tiebreakerRound, setTiebreakerRound] = useState(0)
   const [soundEnabled, setSoundEnabled] = useState(true)
 
   // Save/Load State
@@ -252,6 +287,8 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     setStarted(true)
     setRoundWinnerBuckets([])
     setShowWinCelebration(false)
+    setShowTiebreaker(false)
+    setTiebreakerRound(0)
     allowWinCountRef.current = true
 
     if (hasStartedOnceRef.current) {
@@ -295,6 +332,12 @@ export function Plinko({ initialConfig }: PlinkoProps) {
       allowWinCountRef.current = false
     }
   }, [bucketAssignments, persistPlayers, showConfig])
+
+  // Handle tiebreaker announcement
+  const handleTiebreaker = useCallback((roundNumber: number) => {
+    setTiebreakerRound(roundNumber)
+    setShowTiebreaker(true)
+  }, [])
 
   // Config change handler
   const handleConfigChange = <K extends keyof PlinkoConfig>(key: K, value: PlinkoConfig[K]) => {
@@ -433,6 +476,7 @@ export function Plinko({ initialConfig }: PlinkoProps) {
         rightSidebarOpen={rightSidebarOpen}
         onLeftSidebarToggle={() => setLeftSidebarOpen(!leftSidebarOpen)}
         onRightSidebarToggle={() => setRightSidebarOpen(!rightSidebarOpen)}
+        forceRightPinned={showConfig}
         leftSidebar={
           <PlayerSidebar
             players={visiblePlayers}
@@ -444,16 +488,24 @@ export function Plinko({ initialConfig }: PlinkoProps) {
         }
         mainContent={
           <div className="flex flex-col items-center gap-4">
-            <PlinkoGame
-              key={boardKey}
-              config={config}
-              bucketAssignments={bucketAssignments}
-              players={visiblePlayers}
-              isRunning={started}
-              onGameEnd={handleGameEnd}
-              winningBuckets={roundWinnerBuckets}
-              soundEnabled={soundEnabled}
-            />
+            <div className="relative">
+              <PlinkoGame
+                key={boardKey}
+                config={config}
+                bucketAssignments={bucketAssignments}
+                players={visiblePlayers}
+                isRunning={started}
+                onGameEnd={handleGameEnd}
+                onTiebreaker={handleTiebreaker}
+                winningBuckets={roundWinnerBuckets}
+                soundEnabled={soundEnabled}
+              />
+              <TiebreakerAnnouncement
+                isVisible={showTiebreaker}
+                roundNumber={tiebreakerRound}
+                onComplete={() => setShowTiebreaker(false)}
+              />
+            </div>
             <PlinkoControls
               isRunning={started}
               onStart={startGame}

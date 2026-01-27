@@ -109,11 +109,11 @@ export function usePlinkoPhysics({
       Engine.clear(engineRef.current)
     }
     
-    // Create fresh engine
+    // Create fresh engine with higher precision to prevent ball tunneling
     const engine = Engine.create()
-    engine.positionIterations = 8
-    engine.velocityIterations = 6
-    engine.constraintIterations = 2
+    engine.positionIterations = 12
+    engine.velocityIterations = 10
+    engine.constraintIterations = 4
     
     engineRef.current = engine
     settledBallsRef.current = new Set()
@@ -122,19 +122,16 @@ export function usePlinkoPhysics({
 
     const { width, height } = config
 
-    // Create walls
+    // Create walls - all walls thick enough to prevent tunneling at high velocities
+    const wallThickness = 200
     const walls = [
-      Bodies.rectangle(width / 2, -25, width, 50, { isStatic: true, label: "wall-ceiling" }),
-      Bodies.rectangle(width / 2, height - config.wallThickness / 2, width, config.wallThickness, { 
+      Bodies.rectangle(width / 2, -wallThickness / 2, width + wallThickness * 2, wallThickness, { isStatic: true, label: "wall-ceiling" }),
+      Bodies.rectangle(width / 2, height + wallThickness / 2, width + wallThickness * 2, wallThickness, { 
         isStatic: true, 
         label: "wall-floor" 
       }),
-      Bodies.rectangle(width / 2, height + config.wallThickness / 2, width, config.wallThickness, { 
-        isStatic: true,
-        label: "wall-safety"
-      }),
-      Bodies.rectangle(-25, height / 2, 50, height, { isStatic: true, label: "wall-left" }),
-      Bodies.rectangle(width + 25, height / 2, 50, height, { isStatic: true, label: "wall-right" })
+      Bodies.rectangle(-wallThickness / 2, height / 2, wallThickness, height + wallThickness * 2, { isStatic: true, label: "wall-left" }),
+      Bodies.rectangle(width + wallThickness / 2, height / 2, wallThickness, height + wallThickness * 2, { isStatic: true, label: "wall-right" })
     ]
     Composite.add(engine.world, walls)
 
@@ -142,7 +139,12 @@ export function usePlinkoPhysics({
     // Ensure minimum wall gap to prevent balls from getting stuck (at least 2 ball diameters)
     const minWallGap = config.ballRadius * 4
     const effectiveWallGap = Math.max(config.pinWallGap, minWallGap)
-    const xSpacing = (width - effectiveWallGap * 2) / (config.pinColumns - 1)
+    // Calculate spacing so that offset rows (which add half-spacing) still stay within bounds
+    // For offset rows: rightmost pin = effectiveWallGap + (cols-1)*spacing + spacing/2
+    // We want this to equal width - effectiveWallGap, so:
+    // spacing * (cols - 1 + 0.5) = width - 2*effectiveWallGap
+    // spacing = (width - 2*effectiveWallGap) / (cols - 0.5)
+    const xSpacing = (width - effectiveWallGap * 2) / (config.pinColumns - 0.5)
     const yStart = config.ceilingGap
     const yEnd = height - config.rimHeight - config.pinRimGap
     const ySpacing = config.pinRows > 1 ? (yEnd - yStart) / (config.pinRows - 1) : 0
@@ -204,6 +206,8 @@ export function usePlinkoPhysics({
       const currentBounds = bucketBoundsRef.current
       const currentConfig = configRef.current
       const settleZone = currentConfig.height - 60
+      // Safety threshold: if ball falls this far below the floor, it has escaped
+      const escapeThreshold = currentConfig.height + 100
       
       ballsRef.current.forEach((ball) => {
         if (settledBallsRef.current.has(ball.id)) return
@@ -211,7 +215,12 @@ export function usePlinkoPhysics({
         // Check if ball has settled (low velocity and in bucket zone)
         // Using both vertical and horizontal velocity for more reliable detection
         const speed = Math.sqrt(ball.velocity.x ** 2 + ball.velocity.y ** 2)
-        if (ball.position.y > settleZone && speed < 2) {
+        const isInSettleZone = ball.position.y > settleZone && speed < 2
+        // Safety net: ball has fallen through the floor (tunneling)
+        const hasEscaped = ball.position.y > escapeThreshold
+        
+        if (isInSettleZone || hasEscaped) {
+          // Determine bucket based on x position
           let bucketIndex = -1
           for (let i = 0; i < currentBounds.length - 1; i++) {
             if (ball.position.x >= currentBounds[i] && ball.position.x < currentBounds[i + 1]) {
@@ -220,16 +229,29 @@ export function usePlinkoPhysics({
             }
           }
           
+          // Fallback: if ball x is outside bounds, clamp to nearest bucket
+          if (bucketIndex < 0 && currentBounds.length > 1) {
+            if (ball.position.x < currentBounds[0]) {
+              bucketIndex = 0 // Left-most bucket
+            } else {
+              bucketIndex = currentBounds.length - 2 // Right-most bucket
+            }
+          }
+          
           if (bucketIndex >= 0) {
             settledBallsRef.current.add(ball.id)
+            
+            if (hasEscaped) {
+              console.warn(`Ball ${ball.id} escaped through floor at y=${ball.position.y.toFixed(1)}, assigned to bucket ${bucketIndex}`)
+            }
             
             // Call the settle callback
             if (onBallSettleRef.current) {
               onBallSettleRef.current(bucketIndex)
             }
             
-            // Optionally destroy the ball
-            if (currentConfig.destroyBalls) {
+            // Remove escaped balls or optionally destroy settled balls
+            if (hasEscaped || currentConfig.destroyBalls) {
               Composite.remove(engine.world, ball)
               ballsRef.current = ballsRef.current.filter(b => b.id !== ball.id)
             }
@@ -267,7 +289,12 @@ export function usePlinkoPhysics({
       
       // Convert to velocity vector
       const vx = Math.cos(angle) * config.dropVelocity
-      const vy = Math.sin(angle) * config.dropVelocity
+      let vy = Math.sin(angle) * config.dropVelocity
+      
+      // Ensure vy is always positive (downward) - prevent balls from flying off screen
+      vy = Math.abs(vy)
+      // Also ensure a minimum downward velocity to prevent balls getting stuck
+      vy = Math.max(vy, config.dropVelocity * 0.1)
       
       Body.setVelocity(ball, { x: vx, y: vy })
     }
