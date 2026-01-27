@@ -10,6 +10,10 @@ import { PlinkoLeaderboard } from "./plinko/PlinkoLeaderboard"
 import { WinCelebration } from "./plinko/WinCelebration"
 import { TiebreakerAnnouncement } from "./plinko/TiebreakerAnnouncement"
 import { defaultConfig, type PlinkoConfig, type PlayerProfile } from "./plinko/types"
+import { WheelSpinGame, WheelSpinConfigPanel, defaultWheelSpinConfig, type WheelSpinConfig } from "./wheelspin"
+import { SlotMachineGame, SlotMachineConfigPanel, defaultSlotMachineConfig, type SlotMachineConfig } from "./slotmachine"
+import { RouletteGame, RouletteConfigPanel, defaultRouletteConfig, type RouletteConfig } from "./roulette"
+import { type GameType } from "./types"
 
 const playerStorageKey = "plinko.players.v2"
 const configStorageKey = "plinko.config.v1"
@@ -136,9 +140,13 @@ export function Plinko({ initialConfig }: PlinkoProps) {
   const [rightSidebarOpen, setRightSidebarOpen] = useState(false)
   const [playerSearchQuery, setPlayerSearchQuery] = useState("")
   const [boardKey, setBoardKey] = useState(0)
+  const [currentGame, setCurrentGame] = useState<GameType>("plinko")
 
   // Game State - start with defaults, then apply responsive size on mount
   const [config, setConfig] = useState<PlinkoConfig>(initialConfig ?? defaultConfig)
+  const [wheelSpinConfig, setWheelSpinConfig] = useState<WheelSpinConfig>(defaultWheelSpinConfig)
+  const [slotMachineConfig, setSlotMachineConfig] = useState<SlotMachineConfig>(defaultSlotMachineConfig)
+  const [rouletteConfig, setRouletteConfig] = useState<RouletteConfig>(defaultRouletteConfig)
   
   // Track if we've applied responsive sizing (only do it once on mount)
   const hasAppliedResponsiveSizeRef = useRef(false)
@@ -339,13 +347,25 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     setShowTiebreaker(true)
   }, [])
 
-  // Config change handler
+  // Config change handlers
   const handleConfigChange = <K extends keyof PlinkoConfig>(key: K, value: PlinkoConfig[K]) => {
     setConfig(prev => ({ ...prev, [key]: value }))
     if (started) {
       setStarted(false)
     }
     setBoardKey(k => k + 1)
+  }
+
+  const handleWheelSpinConfigChange = <K extends keyof WheelSpinConfig>(key: K, value: WheelSpinConfig[K]) => {
+    setWheelSpinConfig(prev => ({ ...prev, [key]: value }))
+  }
+
+  const handleSlotMachineConfigChange = <K extends keyof SlotMachineConfig>(key: K, value: SlotMachineConfig[K]) => {
+    setSlotMachineConfig(prev => ({ ...prev, [key]: value }))
+  }
+
+  const handleRouletteConfigChange = <K extends keyof RouletteConfig>(key: K, value: RouletteConfig[K]) => {
+    setRouletteConfig((prev: RouletteConfig) => ({ ...prev, [key]: value }))
   }
 
   // Player toggle handler
@@ -462,6 +482,26 @@ export function Plinko({ initialConfig }: PlinkoProps) {
     setShowPlayerManager(true)
   }, [players])
 
+  // Handle game switch
+  const handleGameChange = useCallback((game: GameType) => {
+    setCurrentGame(game)
+    setStarted(false)
+    setRoundWinnerBuckets([])
+    setShowWinCelebration(false)
+  }, [])
+
+  // Handle wheel spin win
+  const handleWheelSpinWin = useCallback((winner: PlayerProfile) => {
+    // Increment wins for the winner
+    setPlayers(prev => {
+      const updated = prev.map(p =>
+        p.id === winner.id ? { ...p, wins: p.wins + 1 } : p
+      )
+      void persistPlayers(updated)
+      return updated
+    })
+  }, [persistPlayers])
+
   // Get winner for celebration
   const celebrationWinner = useMemo(() => {
     if (roundWinnerBuckets.length !== 1) return null
@@ -488,48 +528,238 @@ export function Plinko({ initialConfig }: PlinkoProps) {
         }
         mainContent={
           <div className="flex flex-col items-center gap-4">
-            <div className="relative">
-              <PlinkoGame
-                key={boardKey}
-                config={config}
-                bucketAssignments={bucketAssignments}
-                players={visiblePlayers}
-                isRunning={started}
-                onGameEnd={handleGameEnd}
-                onTiebreaker={handleTiebreaker}
-                winningBuckets={roundWinnerBuckets}
-                soundEnabled={soundEnabled}
-              />
-              <TiebreakerAnnouncement
-                isVisible={showTiebreaker}
-                roundNumber={tiebreakerRound}
-                onComplete={() => setShowTiebreaker(false)}
-              />
-            </div>
-            <PlinkoControls
-              isRunning={started}
-              onStart={startGame}
-              onStop={stopGame}
-              onConfigToggle={() => {
-                setShowConfig(!showConfig)
-                setRightSidebarOpen(true)
-              }}
-              showConfig={showConfig}
-              isMuted={!soundEnabled}
-              onMuteToggle={() => setSoundEnabled(!soundEnabled)}
-            />
+            {currentGame === "plinko" ? (
+              <>
+                <div className="relative">
+                  <PlinkoGame
+                    key={boardKey}
+                    config={config}
+                    bucketAssignments={bucketAssignments}
+                    players={visiblePlayers}
+                    isRunning={started}
+                    onGameEnd={handleGameEnd}
+                    onTiebreaker={handleTiebreaker}
+                    winningBuckets={roundWinnerBuckets}
+                    soundEnabled={soundEnabled}
+                  />
+                  <TiebreakerAnnouncement
+                    isVisible={showTiebreaker}
+                    roundNumber={tiebreakerRound}
+                    onComplete={() => setShowTiebreaker(false)}
+                  />
+                </div>
+                <PlinkoControls
+                  isRunning={started}
+                  onStart={startGame}
+                  onStop={stopGame}
+                  onConfigToggle={() => {
+                    setShowConfig(!showConfig)
+                    setRightSidebarOpen(true)
+                  }}
+                  showConfig={showConfig}
+                  isMuted={!soundEnabled}
+                  onMuteToggle={() => setSoundEnabled(!soundEnabled)}
+                />
+              </>
+            ) : currentGame === "wheelspin" ? (
+              <>
+                <WheelSpinGame
+                  players={visiblePlayers}
+                  onGameEnd={handleWheelSpinWin}
+                  soundEnabled={soundEnabled}
+                  config={wheelSpinConfig}
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setShowConfig(!showConfig)
+                      setRightSidebarOpen(true)
+                    }}
+                    className={`p-2 rounded-lg transition-colors ${
+                      showConfig 
+                        ? "bg-primary/20 text-primary" 
+                        : "bg-muted hover:bg-muted/80 text-muted-foreground"
+                    }`}
+                    title="Settings"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => setSoundEnabled(!soundEnabled)}
+                    className="p-2 rounded-lg bg-muted hover:bg-muted/80 text-muted-foreground transition-colors"
+                    title={soundEnabled ? "Mute" : "Unmute"}
+                  >
+                    {soundEnabled ? (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" clipRule="evenodd" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              </>
+            ) : currentGame === "slotmachine" ? (
+              <>
+                <SlotMachineGame
+                  players={visiblePlayers}
+                  config={slotMachineConfig}
+                  onGameEnd={(result) => {
+                    // Increment wins for the winner
+                    if (result.winner) {
+                      setPlayers(prev => {
+                        const updated = prev.map(p =>
+                          p.id === result.winner.id ? { ...p, wins: p.wins + 1 + (result.bonusPoints ?? 0) } : p
+                        )
+                        void persistPlayers(updated)
+                        return updated
+                      })
+                    }
+                  }}
+                  soundEnabled={soundEnabled}
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setShowConfig(!showConfig)
+                      setRightSidebarOpen(true)
+                    }}
+                    className={`p-2 rounded-lg transition-colors ${
+                      showConfig 
+                        ? "bg-primary/20 text-primary" 
+                        : "bg-muted hover:bg-muted/80 text-muted-foreground"
+                    }`}
+                    title="Settings"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => setSoundEnabled(!soundEnabled)}
+                    className="p-2 rounded-lg bg-muted hover:bg-muted/80 text-muted-foreground transition-colors"
+                    title={soundEnabled ? "Mute" : "Unmute"}
+                  >
+                    {soundEnabled ? (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" clipRule="evenodd" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              </>
+            ) : currentGame === "roulette" ? (
+              <>
+                <RouletteGame
+                  players={visiblePlayers}
+                  config={rouletteConfig}
+                  onGameEnd={(winner: PlayerProfile) => {
+                    // Increment wins for the winner
+                    setPlayers((prev: PlayerProfile[]) => {
+                      const updated = prev.map(p =>
+                        p.id === winner.id ? { ...p, wins: p.wins + 1 } : p
+                      )
+                      void persistPlayers(updated)
+                      return updated
+                    })
+                  }}
+                  soundEnabled={soundEnabled}
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setShowConfig(!showConfig)
+                      setRightSidebarOpen(true)
+                    }}
+                    className={`p-2 rounded-lg transition-colors ${
+                      showConfig 
+                        ? "bg-primary/20 text-primary" 
+                        : "bg-muted hover:bg-muted/80 text-muted-foreground"
+                    }`}
+                    title="Settings"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => setSoundEnabled(!soundEnabled)}
+                    className="p-2 rounded-lg bg-muted hover:bg-muted/80 text-muted-foreground transition-colors"
+                    title={soundEnabled ? "Mute" : "Unmute"}
+                  >
+                    {soundEnabled ? (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" clipRule="evenodd" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              </>
+            ) : null}
           </div>
         }
         rightSidebar={
           showConfig ? (
-            <PlinkoConfigPanel
-              config={config}
-              onConfigChange={handleConfigChange}
-              enrolledPlayerCount={enrolledPlayers.length}
-              onSaveToServer={handleSaveConfigToServer}
-              isSaving={isSaving}
-              saveMessage={saveMessage}
-            />
+            currentGame === "plinko" ? (
+              <PlinkoConfigPanel
+                config={config}
+                onConfigChange={handleConfigChange}
+                enrolledPlayerCount={enrolledPlayers.length}
+                onSaveToServer={handleSaveConfigToServer}
+                isSaving={isSaving}
+                saveMessage={saveMessage}
+                currentGame={currentGame}
+                onGameChange={handleGameChange}
+              />
+            ) : currentGame === "wheelspin" ? (
+              <WheelSpinConfigPanel
+                config={wheelSpinConfig}
+                onConfigChange={handleWheelSpinConfigChange}
+                onSaveToServer={handleSaveConfigToServer}
+                isSaving={isSaving}
+                saveMessage={saveMessage}
+                currentGame={currentGame}
+                onGameChange={handleGameChange}
+              />
+            ) : currentGame === "slotmachine" ? (
+              <SlotMachineConfigPanel
+                config={slotMachineConfig}
+                onConfigChange={handleSlotMachineConfigChange}
+                onSaveToServer={handleSaveConfigToServer}
+                isSaving={isSaving}
+                saveMessage={saveMessage}
+                currentGame={currentGame}
+                onGameChange={handleGameChange}
+              />
+            ) : currentGame === "roulette" ? (
+              <RouletteConfigPanel
+                config={rouletteConfig}
+                onConfigChange={handleRouletteConfigChange}
+                onSaveToServer={handleSaveConfigToServer}
+                isSaving={isSaving}
+                saveMessage={saveMessage}
+                currentGame={currentGame}
+                onGameChange={handleGameChange}
+              />
+            ) : null
           ) : (
             <PlinkoLeaderboard
               players={visiblePlayers}

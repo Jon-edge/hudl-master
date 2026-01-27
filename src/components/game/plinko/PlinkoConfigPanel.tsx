@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/Input"
 import { RangeSlider } from "@/components/ui/RangeSlider"
 import { Select } from "@/components/ui/Select"
 import type { PlinkoConfig } from "./types"
+import { type GameType, GAMES } from "../types"
 
 export interface PlinkoConfigPanelProps {
   config: PlinkoConfig
@@ -16,6 +17,9 @@ export interface PlinkoConfigPanelProps {
   isSaving?: boolean
   saveMessage?: { type: "success" | "error"; text: string } | null
   className?: string
+  // Game selection
+  currentGame?: GameType
+  onGameChange?: (game: GameType) => void
 }
 
 interface CollapsibleSectionProps {
@@ -74,9 +78,46 @@ export function PlinkoConfigPanel({
   isSaving = false,
   saveMessage,
   className,
+  currentGame = "plinko",
+  onGameChange,
 }: PlinkoConfigPanelProps) {
   return (
     <div className={cn("space-y-4", className)}>
+      {/* Game Selection */}
+      {onGameChange && (
+        <CollapsibleSection title="🎮 Game Selection" defaultOpen={true}>
+          <div className="grid grid-cols-2 gap-2">
+            {(Object.keys(GAMES) as GameType[]).map(gameId => {
+              const game = GAMES[gameId]
+              const isSelected = currentGame === gameId
+              return (
+                <button
+                  key={gameId}
+                  onClick={() => onGameChange(gameId)}
+                  className={cn(
+                    "flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all",
+                    isSelected 
+                      ? "border-primary bg-primary/10 shadow-md" 
+                      : "border-border/50 hover:border-primary/50 hover:bg-muted/50"
+                  )}
+                >
+                  <span className="text-2xl">{game.icon}</span>
+                  <span className={cn(
+                    "font-semibold text-sm",
+                    isSelected ? "text-primary" : "text-foreground"
+                  )}>
+                    {game.name}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+          <p className="text-xs text-muted-foreground text-center mt-2">
+            {GAMES[currentGame].description}
+          </p>
+        </CollapsibleSection>
+      )}
+
       {/* Header with Save */}
       {onSaveToServer && (
         <div className="flex items-center gap-3">
