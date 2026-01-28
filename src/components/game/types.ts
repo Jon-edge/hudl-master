@@ -1,5 +1,5 @@
 // Shared game types
-export type GameType = "plinko" | "wheelspin" | "slotmachine" | "roulette"
+export type GameType = "plinko" | "wheelspin" | "slotmachine" | "roulette" | "race"
 
 export interface GameInfo {
   id: GameType
@@ -32,6 +32,12 @@ export const GAMES: Record<GameType, GameInfo> = {
     name: "Roulette",
     description: "Spin the roulette wheel and let fate decide",
     icon: "🎲",
+  },
+  race: {
+    id: "race",
+    name: "Race",
+    description: "Watch racers compete to the finish line",
+    icon: "🏁",
   },
 }
 
